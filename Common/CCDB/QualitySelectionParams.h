@@ -75,9 +75,9 @@ enum QualitySelectionFlags {
 };
 
 // Helper class to allow appending new elements to a vector of QualitySelectionFlags
-class QualitySelection: public std::vector<QualitySelectionFlags>
+class QualitySelection : public std::vector<QualitySelectionFlags>
 {
-public:
+ public:
   QualitySelection& operator+=(const std::initializer_list<QualitySelectionFlags>& l)
   {
     insert(end(), l.begin(), l.end());
@@ -92,14 +92,13 @@ public:
 };
 
 template <typename T>
-concept HasDetectorQuality = requires(T a, int bit)
-{
+concept HasDetectorQuality = requires(T a, int bit) {
   { a.qc_bit(bit) } -> std::convertible_to<bool>;
 };
 
 class QualityFlagsChecker
 {
-public:
+ public:
   QualityFlagsChecker() = default;
 
   // construct the object from an initializer list, like this:
@@ -138,9 +137,9 @@ public:
     QualitySelection bitsToCheck;
 
     if (label == "CBT") {
-      bitsToCheck += { kFT0Bad, kITSBad, kTPCBadTracking, kTPCBadPID };
+      bitsToCheck += {kFT0Bad, kITSBad, kTPCBadTracking, kTPCBadPID};
       if (treatLimitedAcceptanceAsBad) {
-        bitsToCheck += { kITSLimAccMCRepr, kTPCLimAccMCRepr };
+        bitsToCheck += {kITSLimAccMCRepr, kTPCLimAccMCRepr};
       }
     }
 
@@ -180,7 +179,7 @@ public:
     }
 
     if (checkZDC) {
-      bitsToCheck += { kZDCBad };
+      bitsToCheck += {kZDCBad};
     }
 
     vBitsToCheck = bitsToCheck;
@@ -189,7 +188,7 @@ public:
   bool checkTable(const HasDetectorQuality auto& table)
   {
     if (vBitsToCheck.empty()) {
-      throw std::out_of_range ("QualityFlagsChecker with empty QualitySelectionFlags bits vector");
+      throw std::out_of_range("QualityFlagsChecker with empty QualitySelectionFlags bits vector");
     }
 
     for (auto bit : vBitsToCheck) {
@@ -200,12 +199,12 @@ public:
     return true;
   }
 
-  bool operator ()(const HasDetectorQuality auto& table)
+  bool operator()(const HasDetectorQuality auto& table)
   {
     return checkTable(table);
   }
 
-private:
+ private:
   std::vector<QualitySelectionFlags> vBitsToCheck;
 };
 
