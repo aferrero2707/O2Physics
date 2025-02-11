@@ -120,8 +120,7 @@ class RCTFlagsChecker : public o2::utils::EnumFlags<RCTSelectionFlags>
     reset();
     std::for_each(flags.begin(),
                   flags.end(),
-                  [this](const RCTSelectionFlags f) noexcept { set(f); }
-    );
+                  [this](const RCTSelectionFlags f) noexcept { set(f); });
   }
 
   // Initialize the object from one of the pre-defined runlist selections.
@@ -140,8 +139,7 @@ class RCTFlagsChecker : public o2::utils::EnumFlags<RCTSelectionFlags>
     auto setFlags = [this](std::initializer_list<RCTSelectionFlags> flags) {
       std::for_each(flags.begin(),
                     flags.end(),
-                    [this](const RCTSelectionFlags f) noexcept { set(f); }
-      );
+                    [this](const RCTSelectionFlags f) noexcept { set(f); });
     };
 
     reset();
