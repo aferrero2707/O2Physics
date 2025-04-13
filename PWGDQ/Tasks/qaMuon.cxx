@@ -136,12 +136,35 @@ struct qaMuon {
   o2::ccdb::CcdbApi ccdbApi;
 
   HistogramRegistry registry{"registry", {}};
+  HistogramRegistry registryResiduals{"registryResiduals", {}};
+
+  std::array<double, 5> zRefPlane{
+      firstMFTPlaneZ,
+      lastMFTPlaneZ,
+      -90.0,
+      -300.0,
+      //-505.0,
+      -520.0
+  };
+  std::vector<std::pair<std::string, double>> referencePlanes{
+      {"MFT-begin", 10.0},
+      {"MFT-end", 15.0},
+      {"absorber-begin", 20.0},
+      {"absorber-mid", 75.0},
+      //{"absorber-end", 100.0},
+      {"MCH-begin", 100.0}
+  };
+  std::array<std::string, 4> quadrants = {"Q0", "Q1", "Q2", "Q3"};
+
 
   std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 4>, 2> dcaHistos;
   std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 4>, 2> dcaHistosMixedEvents;
 
-  std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 4>, 4> alignmentHistos;
-  std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 4>, 4> alignmentHistosMixedEvents;
+  std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 4>, 6> alignmentHistos;
+  std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 4>, 6> alignmentHistosMixedEvents;
+
+  std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 10>, 4> residualsHistos;
+  std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 10>, 4> residualsHistosMixedEvents;
 
   // vector of all MFT-MCH(-MID) matching candidates associated to the same MCH(-MID) track,
   // to be sorted in descending order with respect to the matching quality
@@ -270,17 +293,8 @@ struct qaMuon {
 
   void CreateAlignementHistos()
   {
-    std::vector<std::pair<std::string, double>> referencePlanes = {
-        {"MFT-begin", 15.0},
-        {"MFT-end", 20.0},
-        {"absorber-mid", 75.0},
-        {"absorber-end", 100.0}
-    };
-
-    std::array<std::string, 4> quadrants = {"Q0", "Q1", "Q2", "Q3"};
-
-    AxisSpec dcaxMFTAxis = {400, -1.0, 1.0, "DCA_{x}"};
-    AxisSpec dcayMFTAxis = {400, -1.0, 1.0, "DCA_{y}"};
+    AxisSpec dcaxMFTAxis = {400, -0.5, 0.5, "DCA_{x}"};
+    AxisSpec dcayMFTAxis = {400, -0.5, 0.5, "DCA_{y}"};
     AxisSpec dcaxMCHAxis = {400, -10.0, 10.0, "DCA_{x}"};
     AxisSpec dcayMCHAxis = {400, -10.0, 10.0, "DCA_{y}"};
     AxisSpec dxAxis = {600, -30.0, 30.0, "#Delta x (cm)"};
@@ -347,7 +361,29 @@ struct qaMuon {
         alignmentHistosMixedEvents[i][j]["dthetay_vs_thetay"] = registry.add((histPath + "dthetay_vs_thetay").c_str(), std::format("#Delta #theta_y vs. |#theta_y| - {}", quadrant).c_str(), {HistType::kTH2F, {thetayAxis, dThetayAxis}});
       }
     }
-  }
+
+    for (size_t j = 0; j < quadrants.size(); j++) {
+      const auto& quadrant = quadrants[j];
+      AxisSpec xAxis = {20, 0, 200, "|x| (cm)"};
+      AxisSpec yAxis = {10, 0, 200, "|y| (cm)"};
+      for (int chamber = 0; chamber < 10; chamber++) {
+        std::string histPath = std::string("alignment/residuals/") + quadrant + "/CH" + std::to_string(chamber +1) + "/";
+        // Delta x at cluster
+        residualsHistos[j][chamber]["dx_vs_x"] = registryResiduals.add((histPath + "dx_vs_x").c_str(), "Cluster x residual vs. x", {HistType::kTH2F, {xAxis, dxAxis}});
+        residualsHistos[j][chamber]["dx_vs_y"] = registryResiduals.add((histPath + "dx_vs_y").c_str(), "Cluster x residual vs. y", {HistType::kTH2F, {yAxis, dxAxis}});
+        residualsHistos[j][chamber]["dy_vs_x"] = registryResiduals.add((histPath + "dy_vs_x").c_str(), "Cluster y residual vs. x", {HistType::kTH2F, {xAxis, dyAxis}});
+        residualsHistos[j][chamber]["dy_vs_y"] = registryResiduals.add((histPath + "dy_vs_y").c_str(), "Cluster y residual vs. y", {HistType::kTH2F, {yAxis, dyAxis}});
+
+        // mixed events
+        histPath = std::string("alignment/mixed-events/residuals/") + quadrant + "/CH" + std::to_string(chamber +1) + "/";
+        // Delta x at cluster
+        residualsHistosMixedEvents[j][chamber]["dx_vs_x"] = registryResiduals.add((histPath + "dx_vs_x").c_str(), "Cluster x residual vs. x", {HistType::kTH2F, {xAxis, dxAxis}});
+        residualsHistosMixedEvents[j][chamber]["dx_vs_y"] = registryResiduals.add((histPath + "dx_vs_y").c_str(), "Cluster x residual vs. y", {HistType::kTH2F, {yAxis, dxAxis}});
+        residualsHistosMixedEvents[j][chamber]["dy_vs_x"] = registryResiduals.add((histPath + "dy_vs_x").c_str(), "Cluster y residual vs. x", {HistType::kTH2F, {xAxis, dyAxis}});
+        residualsHistosMixedEvents[j][chamber]["dy_vs_y"] = registryResiduals.add((histPath + "dy_vs_y").c_str(), "Cluster y residual vs. y", {HistType::kTH2F, {yAxis, dyAxis}});
+      }
+    }
+}
 
   void init(o2::framework::InitContext&)
   {
@@ -528,10 +564,8 @@ struct qaMuon {
      */
   }
 
-  template<class T>
-  double GetQuadrant(const T& track)
+  int GetQuadrant(double phi)
   {
-    double phi = track.phi() * 180 / TMath::Pi();
     if (phi >= 0 && phi < 90) {
       return 0;
     }
@@ -545,6 +579,13 @@ struct qaMuon {
       return 3;
     }
     return -1;
+  }
+
+  template<class T>
+  int GetQuadrant(const T& track)
+  {
+    double phi = track.phi() * 180 / TMath::Pi();
+    return GetQuadrant(phi);
   }
 
   template<class T, class C>
@@ -1238,11 +1279,7 @@ struct qaMuon {
     track.setCovariances(tcovs);
     auto mchTrack = sExtrap.FwdtoMCH(track);
 
-    if (z > -505.) {
-      o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrack, z);
-    } else {
-      o2::mch::TrackExtrap::extrapToZ(mchTrack, z);
-    }
+    o2::mch::TrackExtrap::extrapToZ(mchTrack, z);
 
     auto proptrack = sExtrap.MCHtoFwd(mchTrack);
     o2::dataformats::GlobalFwdTrack propmuon;
@@ -1294,7 +1331,6 @@ struct qaMuon {
     constexpr double doubleMin = std::numeric_limits<double>::min();
     constexpr double doubleMax = std::numeric_limits<double>::max();
 
-    std::array<double, 4> zRefPlane = {firstMFTPlaneZ, lastMFTPlaneZ, -300.0, -505.0};
 
     // outer loop over collisions
     for (auto& [collisionIndex1, collisionInfo1] : collisionInfos) {
@@ -1318,12 +1354,10 @@ struct qaMuon {
         bool isGoodMuon = IsGoodMuon(mchTrack, collision1, fTrackChi2MchUp, 20.0, fPtMchLow, {fEtaMftLow, fEtaMftUp}, {fRabsLow, fRabsUp}, fSigmaPdcaUp);
         if (!isGoodMuon) continue;
 
-        std::array<o2::dataformats::GlobalFwdTrack, 4> mchTrackExtrap = {
-            PropagateToZMCH(mchTrack, zRefPlane[0]),
-            PropagateToZMCH(mchTrack, zRefPlane[1]),
-            PropagateToZMCH(mchTrack, zRefPlane[2]),
-            PropagateToZMCH(mchTrack, zRefPlane[3])
-        };
+        std::vector<o2::dataformats::GlobalFwdTrack> mchTrackExtrap;
+        for (double z : zRefPlane) {
+          mchTrackExtrap.emplace_back(PropagateToZMCH(mchTrack, z));
+        }
 
         // inner loop over collisions
         for (auto& [collisionIndex2, collisionInfo2] : collisionInfos) {
@@ -1348,6 +1382,28 @@ struct qaMuon {
             bool isGoodMFT = IsGoodMFT(mftTrack, fTrackChi2MftUp, fTrackNClustMftLow);
             if (!isGoodMFT) continue;
 
+            std::vector<o2::dataformats::GlobalFwdTrack> mftTrackExtrap;
+            for (double z : zRefPlane) {
+              mftTrackExtrap.emplace_back(PropagateToZMFT(mftTrack, mchTrackExtrap[1].getP(), z));
+            }
+
+            std::vector<std::array<double, 2>> xPos;
+            std::vector<std::array<double, 2>> yPos;
+            std::vector<std::array<double, 2>> thetax;
+            std::vector<std::array<double, 2>> thetay;
+            for (int zi = 0; zi < zRefPlane.size(); zi++) {
+              xPos.emplace_back(std::array<double, 2>{mchTrackExtrap[zi].getX(), mftTrackExtrap[zi].getX()});
+              yPos.emplace_back(std::array<double, 2>{mchTrackExtrap[zi].getY(), mftTrackExtrap[zi].getY()});
+              thetax.emplace_back(std::array<double, 2>{
+                std::atan2(mchTrackExtrap[zi].getPx(), -1.0 * mchTrackExtrap[zi].getPz()) * 180 / TMath::Pi(),
+                    std::atan2(mftTrackExtrap[zi].getPx(), -1.0 * mftTrackExtrap[zi].getPz()) * 180 / TMath::Pi()
+              });
+              thetay.emplace_back(std::array<double, 2>{
+                std::atan2(mchTrackExtrap[zi].getPy(), -1.0 * mchTrackExtrap[zi].getPz()) * 180 / TMath::Pi(),
+                    std::atan2(mftTrackExtrap[zi].getPy(), -1.0 * mftTrackExtrap[zi].getPz()) * 180 / TMath::Pi()
+              });
+            }
+            /*
             std::array<o2::dataformats::GlobalFwdTrack, 4> mftTrackExtrap = {
                 PropagateToZMFT(mftTrack, mchTrackExtrap[1].getP(), zRefPlane[0]),
                 PropagateToZMFT(mftTrack, mchTrackExtrap[1].getP(), zRefPlane[1]),
@@ -1355,43 +1411,7 @@ struct qaMuon {
                 PropagateToZMFT(mftTrack, mchTrackExtrap[1].getP(), zRefPlane[3])
             };
 
-            std::array<std::array<double, 2>, 4> xPos = {{
-                {{mchTrackExtrap[0].getX(), mftTrackExtrap[0].getX()}},
-                {{mchTrackExtrap[1].getX(), mftTrackExtrap[1].getX()}},
-                {{mchTrackExtrap[2].getX(), mftTrackExtrap[2].getX()}},
-                {{mchTrackExtrap[3].getX(), mftTrackExtrap[3].getX()}}
-            }};
-
-            std::array<std::array<double, 2>, 4> yPos = {{
-                {{mchTrackExtrap[0].getY(), mftTrackExtrap[0].getY()}},
-                {{mchTrackExtrap[1].getY(), mftTrackExtrap[1].getY()}},
-                {{mchTrackExtrap[2].getY(), mftTrackExtrap[2].getY()}},
-                {{mchTrackExtrap[3].getY(), mftTrackExtrap[3].getY()}}
-            }};
-
-            std::array<std::array<double, 2>, 4> thetax = {{
-                {{std::atan2(mchTrackExtrap[0].getPx(), -1.0 * mchTrackExtrap[0].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[0].getPx(), -1.0 * mftTrackExtrap[0].getPz()) * 180 / TMath::Pi()}},
-                {{std::atan2(mchTrackExtrap[1].getPx(), -1.0 * mchTrackExtrap[1].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[1].getPx(), -1.0 * mftTrackExtrap[1].getPz()) * 180 / TMath::Pi()}},
-                {{std::atan2(mchTrackExtrap[2].getPx(), -1.0 * mchTrackExtrap[2].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[2].getPx(), -1.0 * mftTrackExtrap[2].getPz()) * 180 / TMath::Pi()}},
-                {{std::atan2(mchTrackExtrap[3].getPx(), -1.0 * mchTrackExtrap[3].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[3].getPx(), -1.0 * mftTrackExtrap[3].getPz()) * 180 / TMath::Pi()}}
-            }};
-
-            std::array<std::array<double, 2>, 4> thetay = {{
-                {{std::atan2(mchTrackExtrap[0].getPy(), -1.0 * mchTrackExtrap[0].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[0].getPy(), -1.0 * mftTrackExtrap[0].getPz()) * 180 / TMath::Pi()}},
-                {{std::atan2(mchTrackExtrap[1].getPy(), -1.0 * mchTrackExtrap[1].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[1].getPy(), -1.0 * mftTrackExtrap[1].getPz()) * 180 / TMath::Pi()}},
-                {{std::atan2(mchTrackExtrap[2].getPy(), -1.0 * mchTrackExtrap[2].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[2].getPy(), -1.0 * mftTrackExtrap[2].getPz()) * 180 / TMath::Pi()}},
-                {{std::atan2(mchTrackExtrap[3].getPy(), -1.0 * mchTrackExtrap[3].getPz()) * 180 / TMath::Pi(),
-                  std::atan2(mftTrackExtrap[3].getPy(), -1.0 * mftTrackExtrap[3].getPz()) * 180 / TMath::Pi()}}
-            }};
-
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < zRefPlane.size(); i++) {
               if (sameEvent) {
                 //std::cout << std::format("[TOTO1] X at abosrber end: {:0.2f} {:0.2f}", xPos[3][0], xPos[3][1]) << std::endl;
                 //std::cout << std::format("[TOTO2] Fill({:0.2f}, {:0.2f})", std::fabs(xPos[i][1]), xPos[i][0] - xPos[i][1]) << std::endl;
@@ -1427,7 +1447,6 @@ struct qaMuon {
     }
   }
 
-
   void FillDCAPlots(MyEvents const& collisions,
                           aod::BCsWithTimestamps const& bcs,
                           MyMuonsWithCov const& muonTracks,
@@ -1448,7 +1467,7 @@ struct qaMuon {
 
         int quadrant = GetQuadrant(mchTrack);
 
-        bool isGoodMuon = IsGoodMuon(mchTrack, collision1, fTrackChi2MchUp, 20.0, fPtMchLow, {fEtaMftLow, fEtaMftUp}, {fRabsLow, fRabsUp}, fSigmaPdcaUp);
+        bool isGoodMuon = IsGoodMuon(mchTrack, collision1, fTrackChi2MchUp, 30.0, 4.0, {fEtaMftLow, fEtaMftUp}, {fRabsLow, fRabsUp}, fSigmaPdcaUp);
         if (!isGoodMuon) continue;
 
         // inner loop over collisions
@@ -1538,6 +1557,97 @@ struct qaMuon {
     }
   }
 
+  void FillResidualsPlots(MyEvents const& collisions,
+      aod::BCsWithTimestamps const& bcs,
+      MyMuonsWithCov const& muonTracks,
+      MyMFTs const& mftTracks,
+      aod::FwdTrkCls const& clusters,
+      const std::map<uint64_t, CollisionInfo>& collisionInfos)
+  {
+    constexpr double doubleMin = std::numeric_limits<double>::min();
+    constexpr double doubleMax = std::numeric_limits<double>::max();
+
+
+    // outer loop over collisions
+    for (auto& [collisionIndex1, collisionInfo1] : collisionInfos) {
+      auto const& collision1 = collisions.rawIteratorAt(collisionIndex1);
+      int64_t bc1 = bcs.rawIteratorAt(collision1.bcId()).globalBC();
+
+      // outer loop over global muon tracks
+      for (auto& [muonIndex, globalTracksVector] : collisionInfo1.globalMuonTracks) {
+        auto const& muonTrack = muonTracks.rawIteratorAt(globalTracksVector[0]);
+        const auto& mchTrack = muonTrack.template matchMCHTrack_as<MyMuonsWithCov>();
+        const auto& mftTrack = muonTrack.template matchMFTTrack_as<MyMFTs>();
+
+        bool isGoodMuon = IsGoodMuon(mchTrack, collision1, fTrackChi2MchUp, 20.0, fPtMchLow, {fEtaMftLow, fEtaMftUp}, {fRabsLow, fRabsUp}, fSigmaPdcaUp);
+        if (!isGoodMuon) continue;
+
+        bool isGoodMFT = IsGoodMFT(mftTrack, fTrackChi2MftUp, fTrackNClustMftLow);
+        if (!isGoodMFT) continue;
+
+        auto mchTrackAtMFT = PropagateToZMCH(mchTrack, muonTrack.z());
+        double mchMomentumAtMFT = mchTrackAtMFT.getP();
+
+        // inner loop over collisions
+        for (auto& [collisionIndex2, collisionInfo2] : collisionInfos) {
+          auto const& collision2 = collisions.rawIteratorAt(collisionIndex2);
+          int64_t bc2 = bcs.rawIteratorAt(collision2.bcId()).globalBC();
+
+          bool sameEvent = (bc1 == bc2);
+          bool mixedEvent = IsMixedEvent(collisionInfo1, collisionInfo2);
+
+          if (!sameEvent && !mixedEvent)
+            continue;
+
+          // inner loop over MCH tracks
+          for (auto mchIndex : collisionInfo2.mchTracks) {
+            auto const& mchTrack2 = muonTracks.rawIteratorAt(mchIndex);
+
+            // Loop over attached clusters
+            for (auto const& cluster : clusters) {
+
+              //std::cout << "Checking cluster" << std::endl;
+              if (cluster.template fwdtrack_as<MyMuonsWithCov>() != mchTrack2) {
+                continue;
+              }
+
+              int deId = cluster.deId();
+              int chamber = deId / 100 - 1;
+              if (chamber < 0 || chamber > 9)
+                continue;
+
+              double xCluster = cluster.x();
+              double yCluster = cluster.y();
+              double zCluster = cluster.z();
+              double phiClus = std::atan2(yCluster, xCluster) * 180 / TMath::Pi();
+
+              int quadrant = GetQuadrant(phiClus);
+
+              auto mftTrackAtCluster = PropagateToZMFT(mftTrack, mchMomentumAtMFT, zCluster);
+
+              std::array<double, 2> xPos{xCluster, mftTrackAtCluster.getX()};
+              std::array<double, 2> yPos{yCluster, mftTrackAtCluster.getY()};
+
+              //std::cout << std::format("quadrant={}  chamber={}", quadrant, chamber) << std::endl;
+              if (sameEvent) {
+                std::get<std::shared_ptr<TH2>>(residualsHistos[quadrant][chamber]["dx_vs_x"])->Fill(std::fabs(xPos[1]), xPos[0] - xPos[1]);
+                std::get<std::shared_ptr<TH2>>(residualsHistos[quadrant][chamber]["dx_vs_y"])->Fill(std::fabs(yPos[1]), xPos[0] - xPos[1]);
+                std::get<std::shared_ptr<TH2>>(residualsHistos[quadrant][chamber]["dy_vs_x"])->Fill(std::fabs(xPos[1]), yPos[0] - yPos[1]);
+                std::get<std::shared_ptr<TH2>>(residualsHistos[quadrant][chamber]["dy_vs_y"])->Fill(std::fabs(yPos[1]), yPos[0] - yPos[1]);
+              }
+              if (mixedEvent) {
+                std::get<std::shared_ptr<TH2>>(residualsHistosMixedEvents[quadrant][chamber]["dx_vs_x"])->Fill(std::fabs(xPos[1]), xPos[0] - xPos[1]);
+                std::get<std::shared_ptr<TH2>>(residualsHistosMixedEvents[quadrant][chamber]["dx_vs_y"])->Fill(std::fabs(yPos[1]), xPos[0] - xPos[1]);
+                std::get<std::shared_ptr<TH2>>(residualsHistosMixedEvents[quadrant][chamber]["dy_vs_x"])->Fill(std::fabs(xPos[1]), yPos[0] - yPos[1]);
+                std::get<std::shared_ptr<TH2>>(residualsHistosMixedEvents[quadrant][chamber]["dy_vs_y"])->Fill(std::fabs(yPos[1]), yPos[0] - yPos[1]);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   void processQA(MyEvents const& collisions,
                  aod::BCsWithTimestamps const& bcs,
                  MyMuonsWithCov const& muonTracks,
@@ -1546,7 +1656,7 @@ struct qaMuon {
     auto bc = bcs.begin();
     if (mRunNumber != bc.runNumber()) {
       initCCDB(bc);
-       grpmag = ccdbManager->getForTimeStamp<o2::parameters::GRPMagField>(grpmagPath, bc.timestamp());
+      grpmag = ccdbManager->getForTimeStamp<o2::parameters::GRPMagField>(grpmagPath, bc.timestamp());
       if (grpmag != nullptr) {
         LOGF(info, "Init field from GRP");
         o2::base::Propagator::initFieldFromGRP(grpmag);
@@ -1565,6 +1675,7 @@ struct qaMuon {
 
     FillDCAPlots(collisions, bcs, muonTracks, mftTracks, collisionInfos);
     FillAlignmentPlots(collisions, bcs, muonTracks, mftTracks, collisionInfos);
+    FillResidualsPlots(collisions, bcs, muonTracks, mftTracks, clusters, collisionInfos);
   }
 
   PROCESS_SWITCH(qaMuon, processQA, "process qa", true);
