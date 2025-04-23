@@ -484,7 +484,7 @@ struct qaMuon {
     }
 
     int nTrackTypes = static_cast<int>(o2::aod::fwdtrack::ForwardTrackTypeEnum::MCHStandaloneTrack) + 1;
-    AxisSpec trackTypeAxis = {nTrackTypes, 0, nTrackTypes, "track type"};
+    AxisSpec trackTypeAxis = {static_cast<int>(nTrackTypes), 0.0, static_cast<double>(nTrackTypes), "track type"};
     registry.add("nTracksPerType", "Number of tracks per type", {HistType::kTH1F, {trackTypeAxis}});
 
     // ======================
@@ -513,7 +513,7 @@ struct qaMuon {
     // Global muons plots
     // ======================
 
-    AxisSpec nCandidatesAxis = {fNCandidatesMax, 0, fNCandidatesMax, "match candidate rank"};
+    AxisSpec nCandidatesAxis = {static_cast<int>(fNCandidatesMax), 0.0, static_cast<double>(fNCandidatesMax), "match candidate rank"};
     registry.add("global-muons/NCandidates", "Number of MFT-MCH match candidates", {HistType::kTH1F, {nCandidatesAxis}});
     registry.add("global-muons/MatchChi2", "MFT-MCH match chi2", {HistType::kTH2F, {chi2Axis, nCandidatesAxis}});
 
