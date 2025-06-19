@@ -43,11 +43,13 @@ using MyEvents = soa::Join<aod::Collisions, aod::EvSels>;
 using MyMuonsWithCov = soa::Join<aod::FwdTracks, aod::FwdTracksCov>;
 //using MyMuonsWithCov = aod::FwdTracks;
 using MyMFTs = aod::MFTTracks;
+using MyMFTCovariances = aod::MFTTracksCov;
 
 using MyCollision = MyCollisions::iterator;
 using MyBC = MyBCs::iterator;
 using MyMUON = MyMuonsWithCov::iterator;
 using MyMFT = MyMFTs::iterator;
+using MyMFTCovariance = MyMFTCovariances::iterator;
 
 using SMatrix55 = ROOT::Math::SMatrix<double, 5, 5, ROOT::Math::MatRepSym<double, 5>>;
 using SMatrix5 = ROOT::Math::SVector<Double_t, 5>;
@@ -80,6 +82,25 @@ constexpr double firstMCHPlaneZ = -526.16;
 
 static o2::globaltracking::MatchGlobalFwd sExtrap;
 
+using o2::dataformats::GlobalFwdTrack;
+using o2::track::TrackParCovFwd;
+typedef std::function<double(const GlobalFwdTrack& mchtrack, const TrackParCovFwd& mfttrack)> MatchingFunc_t;
+std::map<std::string, MatchingFunc_t> mMatchingFunctionMap; ///< MFT-MCH Matching function
+
+using SMatrix55Std = ROOT::Math::SMatrix<double, 5>;
+using SMatrix55Sym = ROOT::Math::SMatrix<double, 5, 5, ROOT::Math::MatRepSym<double, 5>>;
+
+using SVector2 = ROOT::Math::SVector<double, 2>;
+using SVector4 = ROOT::Math::SVector<double, 4>;
+using SVector5 = ROOT::Math::SVector<double, 5>;
+
+using SMatrix44 = ROOT::Math::SMatrix<double, 4>;
+using SMatrix45 = ROOT::Math::SMatrix<double, 4, 5>;
+using SMatrix54 = ROOT::Math::SMatrix<double, 5, 4>;
+using SMatrix22 = ROOT::Math::SMatrix<double, 2>;
+using SMatrix25 = ROOT::Math::SMatrix<double, 2, 5>;
+using SMatrix52 = ROOT::Math::SMatrix<double, 5, 2>;
+
 struct qaMuon {
   ////   Variables for selecting muon tracks
   Configurable<float> fPMchLow{"cfgPMchLow", 0.0f, ""};
@@ -103,6 +124,7 @@ struct qaMuon {
 
   ////   Variables for alignment corrections
   Configurable<bool> fEnableMFTAlignmentCorrections{"cfgEnableMFTAlignmentCorrections", true, ""};
+  Configurable<bool> fEnableMCHAlignmentCorrections{"cfgEnableMCHAlignmentCorrections", true, ""};
 
   ///    Variables to event mixing criteria
   Configurable<float> fSaveMixedMatchingParamsRate{"cfgSaveMixedMatchingParamsRate", 0.002f, ""};
@@ -126,11 +148,14 @@ struct qaMuon {
   o2::field::MagneticField* fieldB;
   o2::ccdb::CcdbApi ccdbApi;
 
+  double mBzAtMftCenter{ 0 };
+
   HistogramRegistry registry{"registry", {}};
   HistogramRegistry registryDCA{"registryDCA", {}};
   HistogramRegistry registryResiduals{"registryResiduals", {}};
   HistogramRegistry registryResidualsMFT{"registryResidualsMFT", {}};
   HistogramRegistry registryResidualsMCH{"registryResidualsMCH", {}};
+  HistogramRegistry registryMatching{"registryMatching", {}};
 
   std::array<double, 3> zRefPlane{
       firstMFTPlaneZ,
@@ -143,6 +168,8 @@ struct qaMuon {
       {"MCH-begin", 100.0}
   };
   std::array<std::string, 4> quadrants{"Q0", "Q1", "Q2", "Q3"};
+
+  double mMatchingPlaneZ{ lastMFTPlaneZ };
 
 
   std::array<std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 3>, 4>, 2> dcaHistos;
@@ -159,6 +186,9 @@ struct qaMuon {
 
   std::array<std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 10>, 2>, 2> mchResidualsHistosPerDE;
   std::array<std::array<std::array<std::unordered_map<std::string, o2::framework::HistPtr>, 10>, 2>, 2> mchResidualsHistosPerDEMixedEvents;
+
+  std::unordered_map<std::string, o2::framework::HistPtr> matchingHistos;
+  std::unordered_map<std::string, o2::framework::HistPtr> matchingHistosRealigned;
 
   // vector of all MFT-MCH(-MID) matching candidates associated to the same MCH(-MID) track,
   // to be sorted in descending order with respect to the matching quality
@@ -282,6 +312,8 @@ struct qaMuon {
     }
     o2::mch::TrackExtrap::setField();
     fieldB = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField());
+    double centerMFT[3] = {0, 0, -61.4}; // Field at center of MFT
+    mBzAtMftCenter = fieldB->getBz(centerMFT);
     //std::cout << "fieldB: " << (void*)fieldB << std::endl;
   }
 
@@ -608,6 +640,56 @@ struct qaMuon {
     registry.add("dimuon/invariantMass_GlobalMuonKine_subleading_vs_leading", "M_{#mu^{+}#mu^{-}} - subleading vs. leading matches", {HistType::kTH2F, {invMassCorrelationAxis, invMassCorrelationAxis}});
   }
 
+  void createMatchingHistos()
+  {
+    AxisSpec chi2Axis = {1000, 0, 1000, "chi^{2}"};
+    AxisSpec pAxis = {1000, 0, 100, "p (GeV/c)"};
+    std::string histPath = "matching/";
+
+    std::string histName = "chi2ProdVsP";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{prod} vs. MCH momentum", {HistType::kTH2F, {pAxis, chi2Axis}});
+
+    histName = "chi2MatchAllVsP";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchAll} vs. MCH momentum", {HistType::kTH2F, {pAxis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchAll} vs. MCH momentum (realigned)", {HistType::kTH2F, {pAxis, chi2Axis}});
+
+    histName = "chi2MatchAllVsProd";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchAll} vs. ch2^{2}_{prod}", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchAll} vs. ch2^{2}_{prod} (realigned)", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlVsP";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. MCH momentum", {HistType::kTH2F, {pAxis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. MCH momentum (realigned)", {HistType::kTH2F, {pAxis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlVsProd";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. ch2^{2}_{prod}", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. ch2^{2}_{prod} (realigned)", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlAltVsP";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. MCH momentum", {HistType::kTH2F, {pAxis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. MCH momentum (realigned)", {HistType::kTH2F, {pAxis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlAltVsProd";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. ch2^{2}_{prod}", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. ch2^{2}_{prod} (realigned)", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlAltVsStd";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl_alt} vs. ch2^{2}_{MatchXYPhiTanl_std}", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl_alt} vs. ch2^{2}_{MatchXYPhiTanl_std} (realigned)", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlAltAtMCHVsP";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. MCH momentum, MCH matching plane", {HistType::kTH2F, {pAxis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl} vs. MCH momentum, MCH matching plane (realigned)", {HistType::kTH2F, {pAxis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlAltAtMCHVsStd";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl_alt_at_MCH} vs. ch2^{2}_{MatchXYPhiTanl_std}", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl_alt_at_MCH} vs. ch2^{2}_{MatchXYPhiTanl_std} (realigned)", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+
+    histName = "chi2MatchXYPhiTanlAltAtMCHVsMFT";
+    matchingHistos[histName] = registryResidualsMCH.add((histPath + histName).c_str(), "chi^{2}_{MatchXYPhiTanl_alt}, MCH vs. MFT matching planes", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+    matchingHistosRealigned[histName] = registryResidualsMCH.add((histPath + "realigned/" + histName).c_str(), "chi^{2}_{MatchXYPhiTanl_alt}, MCH vs. MFT matching planes (realigned)", {HistType::kTH2F, {chi2Axis, chi2Axis}});
+  }
+
   void init(o2::framework::InitContext&)
   {
     // Load geometry
@@ -633,6 +715,172 @@ struct qaMuon {
     CreateAlignementHistos();
 
     CreateDimuonHistos();
+
+    createMatchingHistos();
+
+    // Define built-in matching functions
+    //________________________________________________________________________________
+    mMatchingFunctionMap["matchALL"] = [](const GlobalFwdTrack& mchTrack, const TrackParCovFwd& mftTrack) -> double {
+      // Match two tracks evaluating all parameters: X,Y, phi, tanl & q/pt
+
+      SMatrix55Sym I = ROOT::Math::SMatrixIdentity(), H_k, V_k;
+      SVector5 m_k(mftTrack.getX(), mftTrack.getY(), mftTrack.getPhi(),
+                   mftTrack.getTanl(), mftTrack.getInvQPt()),
+        r_k_kminus1;
+      SVector5 GlobalMuonTrackParameters = mchTrack.getParameters();
+      SMatrix55Sym GlobalMuonTrackCovariances = mchTrack.getCovariances();
+      V_k(0, 0) = mftTrack.getCovariances()(0, 0);
+      V_k(1, 1) = mftTrack.getCovariances()(1, 1);
+      V_k(2, 2) = mftTrack.getCovariances()(2, 2);
+      V_k(3, 3) = mftTrack.getCovariances()(3, 3);
+      V_k(4, 4) = mftTrack.getCovariances()(4, 4);
+      H_k(0, 0) = 1.0;
+      H_k(1, 1) = 1.0;
+      H_k(2, 2) = 1.0;
+      H_k(3, 3) = 1.0;
+      H_k(4, 4) = 1.0;
+
+      // Covariance of residuals
+      SMatrix55Std invResCov = (V_k + ROOT::Math::Similarity(H_k, GlobalMuonTrackCovariances));
+      invResCov.Invert();
+
+      // Kalman Gain Matrix
+      SMatrix55Std K_k = GlobalMuonTrackCovariances * ROOT::Math::Transpose(H_k) * invResCov;
+
+      // Update Parameters
+      r_k_kminus1 = m_k - H_k * GlobalMuonTrackParameters; // Residuals of prediction
+
+      auto matchChi2Track = ROOT::Math::Similarity(r_k_kminus1, invResCov);
+
+      return matchChi2Track;
+    };
+
+    //________________________________________________________________________________
+    mMatchingFunctionMap["matchXYPhiTanl"] = [](const GlobalFwdTrack& mchTrack, const TrackParCovFwd& mftTrack) -> double {
+
+    // Match two tracks evaluating positions & angles
+
+    SMatrix55Sym I = ROOT::Math::SMatrixIdentity();
+    SMatrix45 H_k;
+    SMatrix44 V_k;
+    SVector4 m_k(mftTrack.getX(), mftTrack.getY(), mftTrack.getPhi(),
+                 mftTrack.getTanl()),
+      r_k_kminus1;
+    SVector5 GlobalMuonTrackParameters = mchTrack.getParameters();
+    SMatrix55Sym GlobalMuonTrackCovariances = mchTrack.getCovariances();
+    V_k(0, 0) = mftTrack.getCovariances()(0, 0);
+    V_k(1, 1) = mftTrack.getCovariances()(1, 1);
+    V_k(2, 2) = mftTrack.getCovariances()(2, 2);
+    V_k(3, 3) = mftTrack.getCovariances()(3, 3);
+    H_k(0, 0) = 1.0;
+    H_k(1, 1) = 1.0;
+    H_k(2, 2) = 1.0;
+    H_k(3, 3) = 1.0;
+
+    // Covariance of residuals
+    SMatrix44 invResCov = (V_k + ROOT::Math::Similarity(H_k, GlobalMuonTrackCovariances));
+    invResCov.Invert();
+
+    // Kalman Gain Matrix
+    SMatrix54 K_k = GlobalMuonTrackCovariances * ROOT::Math::Transpose(H_k) * invResCov;
+
+    // Residuals of prediction
+    r_k_kminus1 = m_k - H_k * GlobalMuonTrackParameters;
+
+    auto matchChi2Track = ROOT::Math::Similarity(r_k_kminus1, invResCov);
+
+    return matchChi2Track; };
+
+    //________________________________________________________________________________
+    mMatchingFunctionMap["matchXY"] = [](const GlobalFwdTrack& mchTrack, const TrackParCovFwd& mftTrack) -> double {
+
+    // Calculate Matching Chi2 - X and Y positions
+
+    SMatrix55Sym I = ROOT::Math::SMatrixIdentity();
+    SMatrix25 H_k;
+    SMatrix22 V_k;
+    SVector2 m_k(mftTrack.getX(), mftTrack.getY()), r_k_kminus1;
+    SVector5 GlobalMuonTrackParameters = mchTrack.getParameters();
+    SMatrix55Sym GlobalMuonTrackCovariances = mchTrack.getCovariances();
+    V_k(0, 0) = mftTrack.getCovariances()(0, 0);
+    V_k(1, 1) = mftTrack.getCovariances()(1, 1);
+    H_k(0, 0) = 1.0;
+    H_k(1, 1) = 1.0;
+
+    // Covariance of residuals
+    SMatrix22 invResCov = (V_k + ROOT::Math::Similarity(H_k, GlobalMuonTrackCovariances));
+    invResCov.Invert();
+
+    // Kalman Gain Matrix
+    SMatrix52 K_k = GlobalMuonTrackCovariances * ROOT::Math::Transpose(H_k) * invResCov;
+
+    // Residuals of prediction
+    r_k_kminus1 = m_k - H_k * GlobalMuonTrackParameters;
+    auto matchChi2Track = ROOT::Math::Similarity(r_k_kminus1, invResCov);
+
+    return matchChi2Track; };
+
+    //________________________________________________________________________________
+    mMatchingFunctionMap["matchNeedsName"] = [this](const GlobalFwdTrack& mchTrack, const TrackParCovFwd& mftTrack) -> double {
+
+    //Hiroshima's Matching function needs a physics-based name
+
+    //Matching constants
+    Double_t LAbs = 415.;    //Absorber Length[cm]
+    Double_t mumass = 0.106; //mass of muon [GeV/c^2]
+    Double_t l;              //the length that extrapolated MCHtrack passes through absorber
+
+    if (mMatchingPlaneZ >= -90.0) {
+      l = LAbs;
+    } else {
+      l = 505.0 + mMatchingPlaneZ;
+    }
+
+    //defference between MFTtrack and MCHtrack
+
+    auto dx = mftTrack.getX() - mchTrack.getX();
+    auto dy = mftTrack.getY() - mchTrack.getY();
+    auto dthetax = TMath::ATan(mftTrack.getPx() / TMath::Abs(mftTrack.getPz())) - TMath::ATan(mchTrack.getPx() / TMath::Abs(mchTrack.getPz()));
+    auto dthetay = TMath::ATan(mftTrack.getPy() / TMath::Abs(mftTrack.getPz())) - TMath::ATan(mchTrack.getPy() / TMath::Abs(mchTrack.getPz()));
+
+    //Multiple Scattering(=MS)
+
+    auto pMCH = mchTrack.getP();
+    auto lorentzbeta = pMCH / TMath::Sqrt(mumass * mumass + pMCH * pMCH);
+    auto zMS = copysign(1.0, mchTrack.getCharge());
+    auto thetaMS = 13.6 / (1000.0 * pMCH * lorentzbeta * 1.0) * zMS * TMath::Sqrt(60.0 * l / LAbs) * (1.0 + 0.038 * TMath::Log(60.0 * l / LAbs));
+    auto xMS = thetaMS * l / TMath::Sqrt(3.0);
+
+    //normalize by theoritical Multiple Coulomb Scattering width to be momentum-independent
+    //make the dx and dtheta dimensionless
+
+    auto dxnorm = dx / xMS;
+    auto dynorm = dy / xMS;
+    auto dthetaxnorm = dthetax / thetaMS;
+    auto dthetaynorm = dthetay / thetaMS;
+
+    //rotate distribution
+
+    auto dxrot = dxnorm * TMath::Cos(TMath::Pi() / 4.0) - dthetaxnorm * TMath::Sin(TMath::Pi() / 4.0);
+    auto dthetaxrot = dxnorm * TMath::Sin(TMath::Pi() / 4.0) + dthetaxnorm * TMath::Cos(TMath::Pi() / 4.0);
+    auto dyrot = dynorm * TMath::Cos(TMath::Pi() / 4.0) - dthetaynorm * TMath::Sin(TMath::Pi() / 4.0);
+    auto dthetayrot = dynorm * TMath::Sin(TMath::Pi() / 4.0) + dthetaynorm * TMath::Cos(TMath::Pi() / 4.0);
+
+    //convert ellipse to circle
+
+    auto k = 0.7; //need to optimize!!
+    auto dxcircle = dxrot;
+    auto dycircle = dyrot;
+    auto dthetaxcircle = dthetaxrot / k;
+    auto dthetaycircle = dthetayrot / k;
+
+    //score
+
+    auto scoreX = TMath::Sqrt(dxcircle * dxcircle + dthetaxcircle * dthetaxcircle);
+    auto scoreY = TMath::Sqrt(dycircle * dycircle + dthetaycircle * dthetaycircle);
+    auto score = TMath::Sqrt(scoreX * scoreX + scoreY * scoreY);
+
+    return score; };
   }
 
   int GetQuadrant(double phi)
@@ -673,14 +921,6 @@ struct qaMuon {
   void TransformMFT(o2::mch::TrackParam& track)
   {
     double zCH10 = -1437.6;
-    /*
-    auto trackAtDCA = track;
-    o2::mch::TrackExtrap::extrapToZ(trackAtDCA, 0);
-    auto trackAtMCH = track;
-    o2::mch::TrackExtrap::extrapToZ(trackAtMCH, zMCH);
-    std::cout << std::format("\n[TOTO] before transform: DCA={:0.3f}  MCH={:0.3f}",
-        trackAtDCA.getNonBendingCoor(), trackAtMCH.getNonBendingCoor()) << std::endl;
-    */
     double z = track.getZ();
     //double dZ = zMCH - z;
     double x = track.getNonBendingCoor();
@@ -688,32 +928,24 @@ struct qaMuon {
     double xSlope = track.getNonBendingSlope();
     double ySlope = track.getBendingSlope();
 
-    double xShiftMCH = (y > 0) ? 0.8541 : -1.5599;
-    //std::cout << std::format("[TOTO] MFT y={:0.3f}  xShift={:0.3f}",
-    //    y, xShiftMCH) << std::endl;
-    double xCorrection = xShiftMCH * z / zCH10;
+    double xSlopeCorrection = (y > 0) ?
+        (-0.0006696 - 0.0005621) / 2.0 :
+        (0.00105 + 0.001007) / 2.0;
+    double xCorrection = xSlopeCorrection * z;
     track.setNonBendingCoor(x + xCorrection);
-    double xSlopeCorrection = xShiftMCH / zCH10;
     track.setNonBendingSlope(xSlope + xSlopeCorrection);
 
-    double yShiftMCH = (y > 0) ? 3.0311 : 0.7588;
-    double yCorrection = yShiftMCH * z / zCH10;
+    double ySlopeCorrection = (y > 0) ?
+        (-0.002299 - 0.002442) / 2.0 :
+        (-0.0005339 - 0.0006921) / 2.0;
+    double yCorrection = ySlopeCorrection * z;
     track.setBendingCoor(y + yCorrection);
-    double ySlopeCorrection = yShiftMCH / zCH10;
     track.setBendingSlope(ySlope + ySlopeCorrection);
     /*
-    std::cout << std::format("[TOTO] MFT corrections: pos={:0.3f}  slope={:0.3f}",
-        xCorrection, xSlopeCorrection) << std::endl;
-    std::cout << std::format("[TOTO] MFT pos: {:0.3f} -> {:0.3f}  slope: {:0.3f} -> {:0.3f}",
-        x, x + xCorrection, xSlope, xSlope + xSlopeCorrection) << std::endl;
-        
-    auto trackAtDCA2 = track;
-    o2::mch::TrackExtrap::extrapToZ(trackAtDCA2, 0);
-    auto trackAtMCH2 = track;
-    o2::mch::TrackExtrap::extrapToZ(trackAtMCH2, zMCH);
-    std::cout << std::format("[TOTO] after transform:  DCA={:0.3f}  MCH={:0.3f}  delta={:0.3f}\n",
-        trackAtDCA2.getNonBendingCoor(), trackAtMCH2.getNonBendingCoor(),
-        trackAtMCH2.getNonBendingCoor() - trackAtMCH.getNonBendingCoor()) << std::endl;
+    std::cout << std::format("[TOTO] MFT position:    pos={:0.3f},{:0.3f}", x, y) << std::endl;
+    std::cout << std::format("[TOTO] MFT corrections: pos={:0.3f},{:0.3f}  slope={:0.12f},{:0.12f}  angle={:0.12f},{:0.12f}",
+        xCorrection, yCorrection, xSlopeCorrection, ySlopeCorrection,
+        std::atan2(xSlopeCorrection, 1), std::atan2(ySlopeCorrection, 1)) << std::endl;
     */
   }
 
@@ -739,6 +971,81 @@ struct qaMuon {
     auto mchTrack = sExtrap.FwdtoMCH(track);
 
     TransformMFT(mchTrack);
+
+    auto transformedTrack = sExtrap.MCHtoFwd(mchTrack);
+    fwdtrack.setParameters(transformedTrack.getParameters());
+    fwdtrack.setZ(transformedTrack.getZ());
+    fwdtrack.setCovariances(transformedTrack.getCovariances());
+  }
+
+  void TransformMCH(o2::mch::TrackParam& track)
+  {
+    double zCH1 = firstMCHPlaneZ;
+
+    double alpha1 = track.getNonBendingSlope();
+    double alpha3 = track.getBendingSlope();
+    double phi = TMath::ATan2(-alpha3, -alpha1) * 180 / TMath::Pi();
+    int quadrant = GetQuadrant(phi);
+
+    //double deltaX[4]{ 0.1003, 0.2825, 0.1807, -0.0588 };
+    double deltaX[4]{ 0.1513, 0.2954, 0.1795, -0.0847 };
+    //double deltaY[4]{ 0.0806, 0.1589, 0.8761, 0.7888 };
+    double deltaY[4]{ 0.1328, 0.1719, 0.8538, 0.8049 };
+    double deltaThetaX[4]{ -0.0030, -0.0482, -0.0499, -0.0233 };
+    double deltaThetaY[4]{ 0.0018, 0.0018, 0.0731, 0.0669 };
+
+    double deltaSlopeX[4];
+    double deltaSlopeY[4];
+    for (int i = 0; i < 4; i++) {
+      deltaSlopeX[i] = std::tan(deltaThetaX[i] * TMath::Pi() / 180.0);
+      deltaSlopeY[i] = std::tan(deltaThetaY[i] * TMath::Pi() / 180.0);
+    }
+
+    double z = track.getZ();
+    double x = track.getNonBendingCoor();
+    double y = track.getBendingCoor();
+    double xSlope = track.getNonBendingSlope();
+    double ySlope = track.getBendingSlope();
+
+    double xSlopeCorrected = xSlope - deltaSlopeX[quadrant];
+    track.setNonBendingSlope(xSlopeCorrected);
+    double xShiftAtCH1 = deltaX[quadrant];
+    //std::cout << std::format("[TOTO] MFT y={:0.3f}  xShift={:0.3f}",
+    //    y, xShiftMCH) << std::endl;
+    double xPositionCorrected = x - xShiftAtCH1 + xSlopeCorrected * (z - zCH1);
+    track.setNonBendingCoor(xPositionCorrected);
+
+    double ySlopeCorrected = ySlope - deltaSlopeY[quadrant];
+    track.setBendingSlope(ySlopeCorrected);
+    double yShiftAtCH1 = deltaY[quadrant];
+    //std::cout << std::format("[TOTO] MFT y={:0.3f}  xShift={:0.3f}",
+    //    y, xShiftMCH) << std::endl;
+    double yPositionCorrected = y - yShiftAtCH1 + ySlopeCorrected * (z - zCH1);
+    track.setBendingCoor(yPositionCorrected);
+  }
+
+  void TransformMCH(o2::dataformats::GlobalFwdTrack& track)
+  {
+    auto mchTrack = sExtrap.FwdtoMCH(track);
+
+    TransformMCH(mchTrack);
+
+    auto transformedTrack = sExtrap.MCHtoFwd(mchTrack);
+    track.setParameters(transformedTrack.getParameters());
+    track.setZ(transformedTrack.getZ());
+    track.setCovariances(transformedTrack.getCovariances());
+  }
+
+  void TransformMCH(o2::track::TrackParCovFwd& fwdtrack)
+  {
+    o2::dataformats::GlobalFwdTrack track;
+    track.setParameters(fwdtrack.getParameters());
+    track.setZ(fwdtrack.getZ());
+    track.setCovariances(fwdtrack.getCovariances());
+
+    auto mchTrack = sExtrap.FwdtoMCH(track);
+
+    TransformMCH(mchTrack);
 
     auto transformedTrack = sExtrap.MCHtoFwd(mchTrack);
     fwdtrack.setParameters(transformedTrack.getParameters());
@@ -1456,6 +1763,9 @@ struct qaMuon {
     track.setZ(fwdtrack.getZ());
     track.setCovariances(tcovs);
     auto mchTrack = sExtrap.FwdtoMCH(track);
+    if (fEnableMCHAlignmentCorrections) {
+      TransformMCH(mchTrack);
+    }
 
     o2::mch::TrackExtrap::extrapToZ(mchTrack, z);
 
@@ -1502,6 +1812,239 @@ struct qaMuon {
 
     return propmuon;
   }
+
+  template<class TMFT, class TMCH>
+  double DoMatchingStandard(const TMFT& mftTrack, MyMFTCovariance const& mftTrackCov, const TMCH& mchTrack, std::string matchingFunction, bool correctAlignment)
+  {
+    ///////////////////////////////////////////////////////////////////////////
+    // Extrapolat MFT
+    ///////////////////////////////////////////////////////////////////////////
+
+    SMatrix5 tmftpars(mftTrack.x(),
+        mftTrack.y(),
+        mftTrack.phi(),
+        mftTrack.tgl(),
+        mftTrack.signed1Pt());
+
+    SMatrix55Sym tmftcovs;
+    tmftcovs(0, 0) = mftTrackCov.cXX();
+    //std::cout << "mftTrackCov.cXX(): " << mftTrackCov.cXX() << std::endl;
+    tmftcovs(0, 1) = mftTrackCov.cXY();
+    tmftcovs(0, 2) = mftTrackCov.cPhiX();
+    tmftcovs(0, 3) = mftTrackCov.cTglX();
+    tmftcovs(0, 4) = mftTrackCov.c1PtX();
+
+    tmftcovs(1, 1) = mftTrackCov.cYY();
+    tmftcovs(1, 2) = mftTrackCov.cPhiY();
+    tmftcovs(1, 3) = mftTrackCov.cTglY();
+    tmftcovs(1, 4) = mftTrackCov.c1PtY();
+
+    tmftcovs(2, 2) = mftTrackCov.cPhiPhi();
+    tmftcovs(2, 3) = mftTrackCov.cTglPhi();
+    tmftcovs(2, 4) = mftTrackCov.c1PtPhi();
+
+    tmftcovs(3, 3) = mftTrackCov.cTglTgl();
+    tmftcovs(3, 4) = mftTrackCov.c1PtTgl();
+
+    tmftcovs(4, 4) = mftTrackCov.c1Pt21Pt2();
+
+    o2::track::TrackParCovFwd extrap_mfttrack{mftTrack.z(),
+      tmftpars,
+      tmftcovs,
+      mftTrack.chi2()};
+    if (correctAlignment) {
+      TransformMFT(extrap_mfttrack);
+    }
+
+    float zPlane = o2::mft::constants::mft::LayerZCoordinate()[9];
+
+    //double centerZ[3] = {0,0,mftTrack.z() + zPlane};
+    //auto Bz = fieldB->getBz(centerZ);
+    extrap_mfttrack.propagateToZ(zPlane, mBzAtMftCenter); // z in cm
+
+    o2::dataformats::GlobalFwdTrack mftTrackAtMatchingPlane;
+    mftTrackAtMatchingPlane.setParameters(extrap_mfttrack.getParameters());
+    mftTrackAtMatchingPlane.setZ(extrap_mfttrack.getZ());
+    mftTrackAtMatchingPlane.setCovariances(extrap_mfttrack.getCovariances());
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Extrapolate MCH
+    ///////////////////////////////////////////////////////////////////////////
+
+    float cov[15] = {
+        mchTrack.cXX(), mchTrack.cXY(), mchTrack.cYY(),
+        mchTrack.cPhiX(), mchTrack.cPhiY(), mchTrack.cPhiPhi(),
+        mchTrack.cTglX(), mchTrack.cTglY(), mchTrack.cTglPhi(),
+        mchTrack.cTglTgl(), mchTrack.c1PtX(), mchTrack.c1PtY(),
+        mchTrack.c1PtPhi(), mchTrack.c1PtTgl(), mchTrack.c1Pt21Pt2()};
+
+    SMatrix5 tpars(mchTrack.x(),
+        mchTrack.y(),
+        mchTrack.phi(),
+        mchTrack.tgl(),
+        mchTrack.signed1Pt());
+    SMatrix55 tcovs(cov, cov + 15);
+    double chi2 = mchTrack.chi2();
+    //std::cout << "mchTrack.cXX(): " << mchTrack.cXX() << std::endl;
+
+    o2::track::TrackParCovFwd parcovmuontrack{mchTrack.z(), tpars, tcovs, chi2};
+
+    o2::dataformats::GlobalFwdTrack gtrack;
+    gtrack.setParameters(tpars);
+    gtrack.setZ(parcovmuontrack.getZ());
+    gtrack.setCovariances(tcovs);
+
+    auto mchtrack = sExtrap.FwdtoMCH(gtrack);
+    if (correctAlignment) {
+      TransformMCH(mchtrack);
+    }
+    o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchtrack,zPlane);
+
+    auto fwdtrack = sExtrap.MCHtoFwd(mchtrack);
+
+    o2::dataformats::GlobalFwdTrack muonTrackAtMatchingPlane;
+    muonTrackAtMatchingPlane.setParameters(fwdtrack.getParameters());
+    muonTrackAtMatchingPlane.setZ(fwdtrack.getZ());
+    muonTrackAtMatchingPlane.setCovariances(fwdtrack.getCovariances());
+
+    ///////////////////////////////////////////////////////////////////////////
+    // CALCULATE CHI2
+    ///////////////////////////////////////////////////////////////////////////
+
+    //std::cout << "mchTrackAtMatchingPlane.cXX(): " << muonTrackAtMatchingPlane.getCovariances()(0, 0) << std::endl;
+    //std::cout << "mftTrackAtMatchingPlane.cXX(): " << mftTrackAtMatchingPlane.getCovariances()(0, 0) << std::endl;
+    double matchingChi2 = mMatchingFunctionMap[matchingFunction](muonTrackAtMatchingPlane, mftTrackAtMatchingPlane);
+    //std::cout << std::format("Matching standard: z={:0.2f}  MCH=[{:0.2f} {:0.2f} {:0.2f}]  MFT=[{:0.2f} {:0.2f} {:0.2f}]  chi2={:0.3f}",
+    //    zPlane,
+    //    muonTrackAtMatchingPlane.getX(), muonTrackAtMatchingPlane.getY(), muonTrackAtMatchingPlane.getZ(),
+    //    mftTrackAtMatchingPlane.getX(), mftTrackAtMatchingPlane.getY(), mftTrackAtMatchingPlane.getZ(),
+    //    matchingChi2) << std::endl;
+    //return mMatchingFunctionMap["matchALL"](muonTrackAtMatchingPlane, mftTrackAtMatchingPlane);
+    return matchingChi2;
+  }
+
+  template<class TMFT, class TMCH>
+  double DoMatchingAlt(const TMFT& mftTrack, MyMFTCovariance const& mftTrackCov, const TMCH& mchTrack, std::string matchingFunction, double zMatchingPlane, bool correctAlignment)
+  {
+    ///////////////////////////////////////////////////////////////////////////
+    // Extrapolate MCH
+    ///////////////////////////////////////////////////////////////////////////
+
+    float cov[15] = {
+        mchTrack.cXX(), mchTrack.cXY(), mchTrack.cYY(),
+        mchTrack.cPhiX(), mchTrack.cPhiY(), mchTrack.cPhiPhi(),
+        mchTrack.cTglX(), mchTrack.cTglY(), mchTrack.cTglPhi(),
+        mchTrack.cTglTgl(), mchTrack.c1PtX(), mchTrack.c1PtY(),
+        mchTrack.c1PtPhi(), mchTrack.c1PtTgl(), mchTrack.c1Pt21Pt2()};
+
+    SMatrix5 tpars(mchTrack.x(),
+        mchTrack.y(),
+        mchTrack.phi(),
+        mchTrack.tgl(),
+        mchTrack.signed1Pt());
+    SMatrix55 tcovs(cov, cov + 15);
+    double chi2 = mchTrack.chi2();
+    //std::cout << "mchTrack.cXX(): " << mchTrack.cXX() << std::endl;
+
+    //o2::track::TrackParCovFwd parcovmuontrack{mchTrack.z(), tpars, tcovs, chi2};
+
+    o2::dataformats::GlobalFwdTrack mchTrackPars;
+    mchTrackPars.setParameters(tpars);
+    mchTrackPars.setZ(mchTrack.z());
+    mchTrackPars.setCovariances(tcovs);
+
+    auto mchTrackParsAtMFT = sExtrap.FwdtoMCH(mchTrackPars);
+    if (correctAlignment) {
+      TransformMCH(mchTrackParsAtMFT);
+    }
+
+    // extrapolate MCH track to first MFT plane
+    o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrackParsAtMFT, mftTrack.z());
+
+    // extrapolate MCH track to matching plane
+    auto mchTrackParsTemp = mchTrackParsAtMFT;
+    o2::mch::TrackExtrap::extrapToZCov(mchTrackParsTemp, zMatchingPlane);
+    //o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrackParsTemp,zMatchingPlane);
+
+    auto mchTrackParsTemp2 = sExtrap.MCHtoFwd(mchTrackParsTemp);
+
+    o2::dataformats::GlobalFwdTrack mchTrackAtMatchingPlane;
+    mchTrackAtMatchingPlane.setParameters(mchTrackParsTemp2.getParameters());
+    mchTrackAtMatchingPlane.setZ(mchTrackParsTemp2.getZ());
+    mchTrackAtMatchingPlane.setCovariances(mchTrackParsTemp2.getCovariances());
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Extrapolat MFT
+    ///////////////////////////////////////////////////////////////////////////
+    double pMCH = mchTrackParsAtMFT.p();
+    double signMCH = mchTrack.sign();
+    double px = pMCH * sin(M_PI / 2 - atan(mftTrack.tgl())) * cos(mftTrack.phi());
+    double py = pMCH * sin(M_PI / 2 - atan(mftTrack.tgl())) * sin(mftTrack.phi());
+    double pt = std::sqrt(std::pow(px, 2) + std::pow(py, 2));
+    double sign = signMCH;
+
+    SMatrix5 tmftpars(mftTrack.x(),
+        mftTrack.y(),
+        mftTrack.phi(),
+        mftTrack.tgl(),
+        sign / pt);
+
+    SMatrix55Sym tmftcovs;
+    tmftcovs(0, 0) = mftTrackCov.cXX();
+    //std::cout << "mftTrackCov.cXX(): " << mftTrackCov.cXX() << std::endl;
+    tmftcovs(0, 1) = mftTrackCov.cXY();
+    tmftcovs(0, 2) = mftTrackCov.cPhiX();
+    tmftcovs(0, 3) = mftTrackCov.cTglX();
+    tmftcovs(0, 4) = mftTrackCov.c1PtX();
+
+    tmftcovs(1, 1) = mftTrackCov.cYY();
+    tmftcovs(1, 2) = mftTrackCov.cPhiY();
+    tmftcovs(1, 3) = mftTrackCov.cTglY();
+    tmftcovs(1, 4) = mftTrackCov.c1PtY();
+
+    tmftcovs(2, 2) = mftTrackCov.cPhiPhi();
+    tmftcovs(2, 3) = mftTrackCov.cTglPhi();
+    tmftcovs(2, 4) = mftTrackCov.c1PtPhi();
+
+    tmftcovs(3, 3) = mftTrackCov.cTglTgl();
+    tmftcovs(3, 4) = mftTrackCov.c1PtTgl();
+
+    tmftcovs(4, 4) = mftTrackCov.c1Pt21Pt2();
+
+    o2::dataformats::GlobalFwdTrack mftTrackPars;
+    mftTrackPars.setParameters(tmftpars);
+    mftTrackPars.setZ(mftTrack.z());
+    mftTrackPars.setCovariances(tmftcovs);
+
+    auto mftTrackParsTemp = sExtrap.FwdtoMCH(mftTrackPars);
+    if (correctAlignment) {
+      TransformMFT(mftTrackParsTemp);
+    }
+
+    o2::mch::TrackExtrap::extrapToZCov(mftTrackParsTemp, zMatchingPlane);
+
+    auto mftTrackParsTemp2 = sExtrap.MCHtoFwd(mftTrackParsTemp);
+
+    o2::dataformats::GlobalFwdTrack mftTrackAtMatchingPlane;
+    mftTrackAtMatchingPlane.setParameters(mftTrackParsTemp2.getParameters());
+    mftTrackAtMatchingPlane.setZ(mftTrackParsTemp2.getZ());
+    mftTrackAtMatchingPlane.setCovariances(mftTrackParsTemp2.getCovariances());
+
+    ///////////////////////////////////////////////////////////////////////////
+    // CALCULATE CHI2
+    ///////////////////////////////////////////////////////////////////////////
+
+    //std::cout << "mchTrackAtMatchingPlane.cXX(): " << mchTrackAtMatchingPlane.getCovariances()(0, 0) << std::endl;
+    //std::cout << "mftTrackAtMatchingPlane.cXX(): " << mftTrackAtMatchingPlane.getCovariances()(0, 0) << std::endl;
+    double matchingChi2 = mMatchingFunctionMap[matchingFunction](mchTrackAtMatchingPlane, mftTrackAtMatchingPlane);
+    //std::cout << std::format("Matching alt:      z={:0.2f}  MCH=[{:0.2f} {:0.2f} {:0.2f}]  MFT=[{:0.2f} {:0.2f} {:0.2f}]  chi2={:0.3f}",
+    //    zMatchingPlane,
+    //    mchTrackAtMatchingPlane.getX(), mchTrackAtMatchingPlane.getY(), mchTrackAtMatchingPlane.getZ(),
+    //    mftTrackAtMatchingPlane.getX(), mftTrackAtMatchingPlane.getY(), mftTrackAtMatchingPlane.getZ(),
+    //    matchingChi2) << std::endl;
+    return matchingChi2;
+  }
+
 
   void FillTrackResidualsPlots(MyEvents const& collisions,
                                aod::BCsWithTimestamps const& bcs,
@@ -1917,10 +2460,93 @@ struct qaMuon {
     }
   }
 
+  void FillMatchingPlots(MyEvents const& collisions,
+      aod::BCsWithTimestamps const& bcs,
+      MyMuonsWithCov const& muonTracks,
+      MyMFTCovariances const& mftTrackCovs,
+      const std::map<uint64_t, CollisionInfo>& collisionInfos)
+  {
+    std::unordered_map<int64_t,int32_t> map_mfttrackcovs;
+    for (auto &mftTrackCov : mftTrackCovs) {
+      map_mfttrackcovs[mftTrackCov.matchMFTTrackId()] = mftTrackCov.globalIndex();
+    }
+
+   // outer loop over collisions
+    for (auto& [collisionIndex1, collisionInfo1] : collisionInfos) {
+      auto const& collision1 = collisions.rawIteratorAt(collisionIndex1);
+      int64_t bc1 = bcs.rawIteratorAt(collision1.bcId()).globalBC();
+
+      // outer loop over global muon tracks
+      for (auto& [muonIndex, globalTracksVector] : collisionInfo1.globalMuonTracks) {
+        auto const& muonTrack = muonTracks.rawIteratorAt(globalTracksVector[0]);
+        if (static_cast<int>(muonTrack.trackType()) >= 2) continue;
+
+        auto const& mftTrack = muonTrack.template matchMFTTrack_as<MyMFTs>();
+        // Get MFT track ID in a global muon track
+        int mftTrackId = muonTrack.matchMFTTrackId();
+        // Get the covariances of the MFT track with covariance global ID converted from MFT ID
+        auto const& mftTrackCov = mftTrackCovs.rawIteratorAt(map_mfttrackcovs[mftTrackId]);
+
+        auto const& mchTrack = muonTrack.template matchMCHTrack_as<MyMuonsWithCov>();
+
+        double chi2Prod = muonTrack.chi2MatchMCHMFT();
+        double mchMom = mchTrack.p();
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2ProdVsP"])->Fill(mchMom, chi2Prod);
+
+        //std::cout << "\n\n========\n" << std::endl;
+
+        // matchAll function, standard extrapolation
+        double chi2Std = DoMatchingStandard(mftTrack, mftTrackCov, mchTrack, "matchALL", false);
+
+        //continue;
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchAllVsP"])->Fill(mchMom, chi2Std);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchAllVsProd"])->Fill(chi2Prod, chi2Std);
+
+        double chi2StdRealign = DoMatchingStandard(mftTrack, mftTrackCov, mchTrack, "matchALL", true);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchAllVsP"])->Fill(mchMom, chi2StdRealign);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchAllVsProd"])->Fill(chi2Prod, chi2StdRealign);
+
+        // matchXYPhiTanl function, standard extrapolation
+        double chi2MatchXYPhiTanl = DoMatchingStandard(mftTrack, mftTrackCov, mchTrack, "matchXYPhiTanl", false);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlVsP"])->Fill(mchMom, chi2MatchXYPhiTanl);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlVsProd"])->Fill(chi2Prod, chi2MatchXYPhiTanl);
+
+        double chi2MatchXYPhiTanlRealign = DoMatchingStandard(mftTrack, mftTrackCov, mchTrack, "matchXYPhiTanl", true);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlVsP"])->Fill(mchMom, chi2MatchXYPhiTanlRealign);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlVsProd"])->Fill(chi2Prod, chi2MatchXYPhiTanlRealign);
+
+        // matchXYPhiTanl function, alternative extrapolation, matching plane at MFT
+        double chi2MatchXYPhiTanlAlt = DoMatchingAlt(mftTrack, mftTrackCov, mchTrack, "matchXYPhiTanl", lastMFTPlaneZ, false);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlAltVsP"])->Fill(mchMom, chi2MatchXYPhiTanlAlt);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlAltVsProd"])->Fill(chi2Prod, chi2MatchXYPhiTanlAlt);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlAltVsStd"])->Fill(chi2Std, chi2MatchXYPhiTanlAlt);
+
+        double chi2MatchXYPhiTanlAltRealign = DoMatchingAlt(mftTrack, mftTrackCov, mchTrack, "matchXYPhiTanl", lastMFTPlaneZ, true);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlAltVsP"])->Fill(mchMom, chi2MatchXYPhiTanlAltRealign);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlAltVsProd"])->Fill(chi2Prod, chi2MatchXYPhiTanlAltRealign);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlAltVsStd"])->Fill(chi2StdRealign, chi2MatchXYPhiTanlAltRealign);
+
+        // matchXYPhiTanl function, alternative extrapolation, matching plane at MCH
+        double chi2MatchXYPhiTanlAltAtMCH = DoMatchingAlt(mftTrack, mftTrackCov, mchTrack, "matchXYPhiTanl", firstMCHPlaneZ, false);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlAltAtMCHVsP"])->Fill(mchMom, chi2MatchXYPhiTanlAltAtMCH);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlAltAtMCHVsStd"])->Fill(chi2Std, chi2MatchXYPhiTanlAltAtMCH);
+        std::get<std::shared_ptr<TH2>>(matchingHistos["chi2MatchXYPhiTanlAltAtMCHVsMFT"])->Fill(chi2MatchXYPhiTanlAlt, chi2MatchXYPhiTanlAltAtMCH);
+
+        double chi2MatchXYPhiTanlAltAtMCHRealign = DoMatchingAlt(mftTrack, mftTrackCov, mchTrack, "matchXYPhiTanl", firstMCHPlaneZ, true);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlAltAtMCHVsP"])->Fill(mchMom, chi2MatchXYPhiTanlAltAtMCHRealign);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlAltAtMCHVsStd"])->Fill(chi2StdRealign, chi2MatchXYPhiTanlAltAtMCHRealign);
+        std::get<std::shared_ptr<TH2>>(matchingHistosRealigned["chi2MatchXYPhiTanlAltAtMCHVsMFT"])->Fill(chi2MatchXYPhiTanlAltRealign, chi2MatchXYPhiTanlAltAtMCHRealign);
+
+        //std::cout << std::format("[TOTO] matching chi2: {} / {}", muonTrack.chi2MatchMCHMFT(), chi2) << std::endl;
+     }
+    }
+ }
+
   void processQA(MyEvents const& collisions,
       aod::BCsWithTimestamps const& bcs,
       MyMuonsWithCov const& muonTracks,
       MyMFTs const& mftTracks,
+      MyMFTCovariances const& mftCovariances,
       aod::FwdTrkCls const& clusters)
   {
     auto bc = bcs.begin();
@@ -1947,6 +2573,8 @@ struct qaMuon {
     FillTrackResidualsPlots(collisions, bcs, muonTracks, mftTracks, collisionInfos);
     FillResidualsPlotsMFT(collisions, bcs, muonTracks, clusters, collisionInfos);
     FillResidualsPlotsMCH(collisions, bcs, muonTracks, clusters, collisionInfos);
+
+    FillMatchingPlots(collisions, bcs, muonTracks, mftCovariances, collisionInfos);
   }
 
   PROCESS_SWITCH(qaMuon, processQA, "process qa", true);
