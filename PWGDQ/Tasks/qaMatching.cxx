@@ -27,12 +27,12 @@
 #include "GlobalTracking/MatchGlobalFwd.h"
 #include "MFTTracking/Constants.h"
 
+#include <algorithm>
 #include <limits>
 #include <map>
+#include <memory>
 #include <string>
 #include <unordered_map>
-#include <memory>
-#include <algorithm>
 #include <utility>
 #include <vector>
 
