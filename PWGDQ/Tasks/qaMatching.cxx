@@ -31,6 +31,10 @@
 #include <map>
 #include <string>
 #include <unordered_map>
+#include <memory>
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 using namespace o2;
 using namespace o2::framework;
