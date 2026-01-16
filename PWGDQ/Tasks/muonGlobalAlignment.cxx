@@ -524,10 +524,10 @@ struct muonGlobalAlignment {
     o2::track::TrackParCovFwd fwdtrack{mftTrack.z(), tpars, tcovs, chi2};
     o2::dataformats::GlobalFwdTrack propmuon;
 
-    //double propVec[3] = {};
-    //propVec[0] = collision.posX() - mftTrack.x();
-    //propVec[1] = collision.posY() - mftTrack.y();
-    //propVec[2] = collision.posZ() - mftTrack.z();
+    // double propVec[3] = {};
+    // propVec[0] = collision.posX() - mftTrack.x();
+    // propVec[1] = collision.posY() - mftTrack.y();
+    // propVec[2] = collision.posZ() - mftTrack.z();
 
     // double centerZ[3] = {mftTrack.x() + propVec[0] / 2.,
     //                      mftTrack.y() + propVec[1] / 2.,
