@@ -399,7 +399,7 @@ struct mftMchMatcher {
       ccdbManager->get<TGeoManager>(geoPath);
     }
 
-    //int matchTypeMax = static_cast<int>(kMatchTypeUndefined);
+    // int matchTypeMax = static_cast<int>(kMatchTypeUndefined);
     AxisSpec matchTypeAxis = {static_cast<int>(kMatchTypeUndefined), 0, static_cast<double>(kMatchTypeUndefined), ""};
     auto hMatchType = std::get<std::shared_ptr<TH1>>(registry.add("matchType", "Match type", {HistType::kTH1F, {matchTypeAxis}}));
     hMatchType->GetXaxis()->SetBinLabel(1, "true (leading)");
