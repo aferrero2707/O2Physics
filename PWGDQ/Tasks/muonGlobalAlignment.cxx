@@ -453,11 +453,7 @@ struct muonGlobalAlignment {
         registry.add("DCA/MCH/DCA_y_vs_sign_vs_quadrant_vs_vz", std::format("DCA(y) vs. vz, quadrant, chargeSign").c_str(), {HistType::kTHnSparseF, {dcazAxis, {4, 0, 4, "quadrant"}, {2, 0, 2, "sign"}, dcayMCHAxis}});
 
         registry.add("residuals/dphi_at_mft", "Track #Delta#phi at MFT",
-                     {HistType::kTHnSparseF, {{200, -0.2f, 0.2f, "#Delta#phi"},
-                                              {80, -10.f, 10.f, "track_x (cm)"},
-                                              {80, -10.f, 10.f, "track_y (cm)"},
-                                              {2, 0, 2, "sign"},
-                                              {20, 0, 100.0, "p (GeV/c)"}}});
+                     {HistType::kTHnSparseF, {{200, -0.2f, 0.2f, "#Delta#phi"}, {80, -10.f, 10.f, "track_x (cm)"}, {80, -10.f, 10.f, "track_y (cm)"}, {2, 0, 2, "sign"}, {20, 0, 100.0, "p (GeV/c)"}}});
       }
     }
   }
