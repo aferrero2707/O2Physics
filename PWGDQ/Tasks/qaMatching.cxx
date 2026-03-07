@@ -170,8 +170,7 @@ struct qaMatching {
     Configurable<std::string> fFunctionLabel_4{"cfgChi2FunctionLabel_4", std::string{""}, "Text label identifying this chi2 matching method"};
     Configurable<std::string> fFunctionLabel_5{"cfgChi2FunctionLabel_5", std::string{""}, "Text label identifying this chi2 matching method"};
     std::array<Configurable<std::string>*, sChi2FunctionsNum> fFunctionLabel{
-      &fFunctionLabel_1, &fFunctionLabel_2, &fFunctionLabel_3, &fFunctionLabel_4, &fFunctionLabel_5
-    };
+      &fFunctionLabel_1, &fFunctionLabel_2, &fFunctionLabel_3, &fFunctionLabel_4, &fFunctionLabel_5};
 
     Configurable<std::string> fFunctionNames_1{"cfgChi2FunctionNames_1", std::string{"prod"}, "Name of the chi2 matching function"};
     Configurable<std::string> fFunctionNames_2{"cfgChi2FunctionNames_2", std::string{"matchALL"}, "Name of the chi2 matching function"};
@@ -179,8 +178,7 @@ struct qaMatching {
     Configurable<std::string> fFunctionNames_4{"cfgChi2FunctionNames_4", std::string{""}, "Name of the chi2 matching function"};
     Configurable<std::string> fFunctionNames_5{"cfgChi2FunctionNames_5", std::string{""}, "Name of the chi2 matching function"};
     std::array<Configurable<std::string>*, sChi2FunctionsNum> fFunctionName{
-      &fFunctionNames_1, &fFunctionNames_2, &fFunctionNames_3, &fFunctionNames_4, &fFunctionNames_5
-    };
+      &fFunctionNames_1, &fFunctionNames_2, &fFunctionNames_3, &fFunctionNames_4, &fFunctionNames_5};
 
     Configurable<float> fMatchingScoreCut_1{"cfgChi2FunctionMatchingScoreCut_1", 0.f, "Minimum score value for selecting good matches"};
     Configurable<float> fMatchingScoreCut_2{"cfgChi2FunctionMatchingScoreCut_2", 0.5f, "Minimum score value for selecting good matches"};
@@ -188,8 +186,7 @@ struct qaMatching {
     Configurable<float> fMatchingScoreCut_4{"cfgChi2FunctionMatchingScoreCut_4", 0.5f, "Minimum score value for selecting good matches"};
     Configurable<float> fMatchingScoreCut_5{"cfgChi2FunctionMatchingScoreCut_5", 0.5f, "Minimum score value for selecting good matches"};
     std::array<Configurable<float>*, sChi2FunctionsNum> fMatchingScoreCut{
-      &fMatchingScoreCut_1, &fMatchingScoreCut_2, &fMatchingScoreCut_3, &fMatchingScoreCut_4, &fMatchingScoreCut_5
-    };
+      &fMatchingScoreCut_1, &fMatchingScoreCut_2, &fMatchingScoreCut_3, &fMatchingScoreCut_4, &fMatchingScoreCut_5};
 
     Configurable<float> fMatchingPlaneZ_1{"cfgChi2FunctionMatchingPlaneZ_1", static_cast<float>(o2::mft::constants::mft::LayerZCoordinate()[9]), "Z position of the matching plane"};
     Configurable<float> fMatchingPlaneZ_2{"cfgChi2FunctionMatchingPlaneZ_2", static_cast<float>(o2::mft::constants::mft::LayerZCoordinate()[9]), "Z position of the matching plane"};
@@ -197,8 +194,7 @@ struct qaMatching {
     Configurable<float> fMatchingPlaneZ_4{"cfgChi2FunctionMatchingPlaneZ_4", static_cast<float>(o2::mft::constants::mft::LayerZCoordinate()[9]), "Z position of the matching plane"};
     Configurable<float> fMatchingPlaneZ_5{"cfgChi2FunctionMatchingPlaneZ_5", static_cast<float>(o2::mft::constants::mft::LayerZCoordinate()[9]), "Z position of the matching plane"};
     std::array<Configurable<float>*, sChi2FunctionsNum> fMatchingPlaneZ{
-      &fMatchingPlaneZ_1, &fMatchingPlaneZ_2, &fMatchingPlaneZ_3, &fMatchingPlaneZ_4, &fMatchingPlaneZ_5
-    };
+      &fMatchingPlaneZ_1, &fMatchingPlaneZ_2, &fMatchingPlaneZ_3, &fMatchingPlaneZ_4, &fMatchingPlaneZ_5};
 
     Configurable<int> fMatchingExtrapMethod_1{"cfgChi2MatchingExtrapMethod_1", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
     Configurable<int> fMatchingExtrapMethod_2{"cfgChi2MatchingExtrapMethod_2", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
@@ -206,8 +202,7 @@ struct qaMatching {
     Configurable<int> fMatchingExtrapMethod_4{"cfgChi2MatchingExtrapMethod_4", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
     Configurable<int> fMatchingExtrapMethod_5{"cfgChi2MatchingExtrapMethod_5", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
     std::array<Configurable<int>*, sChi2FunctionsNum> fMatchingExtrapMethod{
-      &fMatchingExtrapMethod_1, &fMatchingExtrapMethod_2, &fMatchingExtrapMethod_3, &fMatchingExtrapMethod_4, &fMatchingExtrapMethod_5
-    };
+      &fMatchingExtrapMethod_1, &fMatchingExtrapMethod_2, &fMatchingExtrapMethod_3, &fMatchingExtrapMethod_4, &fMatchingExtrapMethod_5};
   } fConfigChi2MatchingOptions;
 
   // ML interface
@@ -219,8 +214,7 @@ struct qaMatching {
     Configurable<std::string> fModelLabel_4{"cfgMLModelLabel_4", std::string{""}, "Text label identifying this group of ML models"};
     Configurable<std::string> fModelLabel_5{"cfgMLModelLabel_5", std::string{""}, "Text label identifying this group of ML models"};
     std::array<Configurable<std::string>*, sMLModelsNum> fModelLabel{
-      &fModelLabel_1, &fModelLabel_2, &fModelLabel_3, &fModelLabel_4, &fModelLabel_5
-    };
+      &fModelLabel_1, &fModelLabel_2, &fModelLabel_3, &fModelLabel_4, &fModelLabel_5};
 
     Configurable<std::string> fModelPathCCDB_1{"cfgMLModelPathCCDB_1", "Users/m/mcoquet/MLTest", "Paths of models on CCDB"};
     Configurable<std::string> fModelPathCCDB_2{"cfgMLModelPathsCCDB_2", std::string{""}, "Paths of models on CCDB"};
@@ -228,8 +222,7 @@ struct qaMatching {
     Configurable<std::string> fModelPathCCDB_4{"cfgMLModelPathsCCDB_4", std::string{""}, "Paths of models on CCDB"};
     Configurable<std::string> fModelPathCCDB_5{"cfgMLModelPathsCCDB_5", std::string{""}, "Paths of models on CCDB"};
     std::array<Configurable<std::string>*, sMLModelsNum> fModelPathCCDB{
-      &fModelPathCCDB_1, &fModelPathCCDB_2, &fModelPathCCDB_3, &fModelPathCCDB_4, &fModelPathCCDB_5
-    };
+      &fModelPathCCDB_1, &fModelPathCCDB_2, &fModelPathCCDB_3, &fModelPathCCDB_4, &fModelPathCCDB_5};
 
     Configurable<std::string> fModelName_1{"cfgMLModelName_1", "model.onnx", "ONNX file names for each pT bin (if not from CCDB full path)"};
     Configurable<std::string> fModelName_2{"cfgMLModelNames_2", std::string{""}, "ONNX file names for each pT bin (if not from CCDB full path)"};
@@ -237,8 +230,7 @@ struct qaMatching {
     Configurable<std::string> fModelName_4{"cfgMLModelNames_4", std::string{""}, "ONNX file names for each pT bin (if not from CCDB full path)"};
     Configurable<std::string> fModelName_5{"cfgMLModelNames_5", std::string{""}, "ONNX file names for each pT bin (if not from CCDB full path)"};
     std::array<Configurable<std::string>*, sMLModelsNum> fModelName{
-      &fModelName_1, &fModelName_2, &fModelName_3, &fModelName_4, &fModelName_5
-    };
+      &fModelName_1, &fModelName_2, &fModelName_3, &fModelName_4, &fModelName_5};
 
     Configurable<std::string> fInputFeatures_1{"cfgMLInputFeatures_1", "chi2MCHMFT", "Names of ML model input features"};
     Configurable<std::string> fInputFeatures_2{"cfgMLInputFeatures_2", std::string{""}, "Names of ML model input features"};
@@ -246,8 +238,7 @@ struct qaMatching {
     Configurable<std::string> fInputFeatures_4{"cfgMLInputFeatures_4", std::string{""}, "Names of ML model input features"};
     Configurable<std::string> fInputFeatures_5{"cfgMLInputFeatures_5", std::string{""}, "Names of ML model input features"};
     std::array<Configurable<std::string>*, sMLModelsNum> fInputFeatures{
-      &fInputFeatures_1, &fInputFeatures_2, &fInputFeatures_3, &fInputFeatures_4, &fInputFeatures_5
-    };
+      &fInputFeatures_1, &fInputFeatures_2, &fInputFeatures_3, &fInputFeatures_4, &fInputFeatures_5};
 
     Configurable<float> fMatchingScoreCut_1{"cfgMLModelMatchingScoreCut_1", 0.f, "Minimum score value for selecting good matches"};
     Configurable<float> fMatchingScoreCut_2{"cfgMLModelMatchingScoreCut_2", 0.f, "Minimum score value for selecting good matches"};
@@ -255,8 +246,7 @@ struct qaMatching {
     Configurable<float> fMatchingScoreCut_4{"cfgMLModelMatchingScoreCut_4", 0.f, "Minimum score value for selecting good matches"};
     Configurable<float> fMatchingScoreCut_5{"cfgMLModelMatchingScoreCut_5", 0.f, "Minimum score value for selecting good matches"};
     std::array<Configurable<float>*, sMLModelsNum> fMatchingScoreCut{
-      &fMatchingScoreCut_1, &fMatchingScoreCut_2, &fMatchingScoreCut_3, &fMatchingScoreCut_4, &fMatchingScoreCut_5
-    };
+      &fMatchingScoreCut_1, &fMatchingScoreCut_2, &fMatchingScoreCut_3, &fMatchingScoreCut_4, &fMatchingScoreCut_5};
 
     Configurable<float> fMatchingPlaneZ_1{"cfgMLModelMatchingPlaneZ_1", static_cast<float>(o2::mft::constants::mft::LayerZCoordinate()[9]), "Z position of the matching plane"};
     Configurable<float> fMatchingPlaneZ_2{"cfgMLModelMatchingPlaneZ_2", 0.f, "Z position of the matching plane"};
@@ -264,8 +254,7 @@ struct qaMatching {
     Configurable<float> fMatchingPlaneZ_4{"cfgMLModelMatchingPlaneZ_4", 0.f, "Z position of the matching plane"};
     Configurable<float> fMatchingPlaneZ_5{"cfgMLModelMatchingPlaneZ_5", 0.f, "Z position of the matching plane"};
     std::array<Configurable<float>*, sMLModelsNum> fMatchingPlaneZ{
-      &fMatchingPlaneZ_1, &fMatchingPlaneZ_2, &fMatchingPlaneZ_3, &fMatchingPlaneZ_4, &fMatchingPlaneZ_5
-    };
+      &fMatchingPlaneZ_1, &fMatchingPlaneZ_2, &fMatchingPlaneZ_3, &fMatchingPlaneZ_4, &fMatchingPlaneZ_5};
 
     Configurable<int> fMatchingExtrapMethod_1{"cfgMLMatchingExtrapMethod_1", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
     Configurable<int> fMatchingExtrapMethod_2{"cfgMLMatchingExtrapMethod_2", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
@@ -273,8 +262,7 @@ struct qaMatching {
     Configurable<int> fMatchingExtrapMethod_4{"cfgMLMatchingExtrapMethod_4", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
     Configurable<int> fMatchingExtrapMethod_5{"cfgMLMatchingExtrapMethod_5", static_cast<int>(0), "Method for MCH track extrapolation to maching plane"};
     std::array<Configurable<int>*, sMLModelsNum> fMatchingExtrapMethod{
-      &fMatchingExtrapMethod_1, &fMatchingExtrapMethod_2, &fMatchingExtrapMethod_3, &fMatchingExtrapMethod_4, &fMatchingExtrapMethod_5
-    };
+      &fMatchingExtrapMethod_1, &fMatchingExtrapMethod_2, &fMatchingExtrapMethod_3, &fMatchingExtrapMethod_4, &fMatchingExtrapMethod_5};
   } fConfigMlOptions;
 
   std::vector<double> binsPtMl;
