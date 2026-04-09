@@ -1757,11 +1757,11 @@ struct muonGlobalAlignment {
         if (fEnableMftMchMatchingAnalysis && convertedTrackWithCorrOk) {
           double refPlaneZ[2] = {fRefPlaneZMFT, fRefPlaneZMCH};
 
-          std::shared_ptr<THnSparse> dxPlots[2]{ registry.get<THnSparse>(HIST("matching/dxAtMFT")), registry.get<THnSparse>(HIST("matching/dxAtMCH")) };
-          std::shared_ptr<THnSparse> dyPlots[2]{ registry.get<THnSparse>(HIST("matching/dyAtMFT")), registry.get<THnSparse>(HIST("matching/dyAtMCH")) };
-          std::shared_ptr<THnSparse> dsxPlots[2]{ registry.get<THnSparse>(HIST("matching/dsxAtMFT")), registry.get<THnSparse>(HIST("matching/dsxAtMCH")) };
-          std::shared_ptr<THnSparse> dsyPlots[2]{ registry.get<THnSparse>(HIST("matching/dsyAtMFT")), registry.get<THnSparse>(HIST("matching/dsyAtMCH")) };
-          std::shared_ptr<THnSparse> dphiPlots[2]{ registry.get<THnSparse>(HIST("matching/dphiAtMFT")), registry.get<THnSparse>(HIST("matching/dphiAtMCH")) };
+          std::shared_ptr<THnSparse> dxPlots[2]{registry.get<THnSparse>(HIST("matching/dxAtMFT")), registry.get<THnSparse>(HIST("matching/dxAtMCH"))};
+          std::shared_ptr<THnSparse> dyPlots[2]{registry.get<THnSparse>(HIST("matching/dyAtMFT")), registry.get<THnSparse>(HIST("matching/dyAtMCH"))};
+          std::shared_ptr<THnSparse> dsxPlots[2]{registry.get<THnSparse>(HIST("matching/dsxAtMFT")), registry.get<THnSparse>(HIST("matching/dsxAtMCH"))};
+          std::shared_ptr<THnSparse> dsyPlots[2]{registry.get<THnSparse>(HIST("matching/dsyAtMFT")), registry.get<THnSparse>(HIST("matching/dsyAtMCH"))};
+          std::shared_ptr<THnSparse> dphiPlots[2]{registry.get<THnSparse>(HIST("matching/dphiAtMFT")), registry.get<THnSparse>(HIST("matching/dphiAtMCH"))};
 
           for (int iRefPlane = 0; iRefPlane < 2; iRefPlane++) {
             const auto mftTrackAtRefPlane = configRealign.fEnableMCHRealign ? PropagateMFTtoMCH(mftTrack, mch::TrackParam(convertedTrackWithCorr.first()), refPlaneZ[iRefPlane]) : PropagateMFTtoMCH(mftTrack, FwdtoMCH(FwdToTrackPar(mchTrack)), refPlaneZ[iRefPlane]);
