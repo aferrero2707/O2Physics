@@ -58,10 +58,10 @@
 #include <THnSparse.h>
 #include <TMath.h>
 
+#include "rapidjson/document.h"
+
 #include <GPUROOTCartesianFwd.h>
 #include <RtypesCore.h>
-
-#include "rapidjson/document.h"
 
 #include <algorithm>
 #include <array>
@@ -77,6 +77,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+
 #include <math.h>
 
 using namespace o2;
