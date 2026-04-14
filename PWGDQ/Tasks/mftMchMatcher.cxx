@@ -51,11 +51,11 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <random>
 
 using namespace o2;
 using namespace o2::framework;
