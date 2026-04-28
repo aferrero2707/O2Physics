@@ -1656,7 +1656,7 @@ struct muonGlobalAlignment {
         auto const& muonTrack = muonTracks.rawIteratorAt(globalTracksVector[0]);
         const auto& mchTrack = muonTrack.template matchMCHTrack_as<MyMuonsWithCov>();
         const auto& mftTrack = muonTrack.template matchMFTTrack_as<MyMFTs>();
-        //int quadrant = GetQuadrant(mchTrack);
+        // int quadrant = GetQuadrant(mchTrack);
         int quadrant = GetQuadrant(mftTrack);
         int posNeg = (mchTrack.sign() >= 0) ? 0 : 1;
 
