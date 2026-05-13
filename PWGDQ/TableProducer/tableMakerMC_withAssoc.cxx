@@ -1041,12 +1041,16 @@ struct TableMakerMC {
       if (static_cast<int>(muon.trackType()) < 2) {
         auto muonID = muon.matchMCHTrackId();
         auto chi2 = muon.chi2MatchMCHMFT();
+        /* TODO: the getInputFeaturesTest() fuction has been removed
+         * Moreover, it is not foreseen to run ML models using only the information
+         * from the global muon track.
+         * Can this part be safely removed?
         if (fConfigVariousOptions.fUseML.value) {
           std::vector<float> output;
           std::vector<float> inputML = matchingMlResponse.getInputFeaturesTest(muon);
           matchingMlResponse.isSelectedMl(inputML, 0, output);
           chi2 = output[0];
-        }
+        }*/
         if (mCandidates.find(muonID) == mCandidates.end()) {
           mCandidates[muonID] = {chi2, muon.globalIndex()};
         } else {
@@ -1062,8 +1066,10 @@ struct TableMakerMC {
   }
 
   template <typename TMuons, typename TMFTTracks, typename TMFTCovs, typename TEvent>
-  void skimBestMuonMatchesML(TMuons const& muons, TMFTTracks const& /*mfttracks*/, TMFTCovs const& mfCovs, TEvent const& collision)
+  void skimBestMuonMatchesML(TMuons const& /*muons*/, TMFTTracks const& /*mfttracks*/, TMFTCovs const& /*mfCovs*/, TEvent const& /*collision*/)
   {
+    return;
+    /* TODO: add missing tables in the tracks and events definitions
     std::unordered_map<int, std::pair<float, int>> mCandidates;
     for (const auto& muon : muons) {
       if (static_cast<int>(muon.trackType()) < 2) {
@@ -1078,7 +1084,7 @@ struct TableMakerMC {
           muonprop = VarManager::PropagateMuon(muontrack, collision, VarManager::kToMatching);
         }
         std::vector<float> output;
-        std::vector<float> inputML = matchingMlResponse.getInputFeaturesGlob(muon, muonprop, mftprop, collision);
+        std::vector<float> inputML = matchingMlResponse.getInputFeatures(muon, mfttrack, muontrack, mftprop, muonprop, collision);
         matchingMlResponse.isSelectedMl(inputML, 0, output);
         float score = output[0];
         if (mCandidates.find(muonID) == mCandidates.end()) {
@@ -1092,7 +1098,7 @@ struct TableMakerMC {
     }
     for (auto& pairCand : mCandidates) {
       fBestMatch[pairCand.second.second] = true;
-    }
+    }*/
   }
 
   template <uint32_t TMuonFillMap, uint32_t TMFTFillMap, typename TEvent, typename TMuons, typename TMFTTracks, typename TMFTCovs>

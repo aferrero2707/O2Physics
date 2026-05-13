@@ -1478,8 +1478,10 @@ struct TableMaker {
   }
 
   template <typename TMuons, typename TMFTTracks, typename TMFTCovs, typename TEvent>
-  void skimBestMuonMatchesML(TMuons const& muons, TMFTTracks const& /*mfttracks*/, TMFTCovs const& mfCovs, TEvent const& collision)
+  void skimBestMuonMatchesML(TMuons const& /*muons*/, TMFTTracks const& /*mfttracks*/, TMFTCovs const& /*mfCovs*/, TEvent const& /*collision*/)
   {
+    return;
+    /* TODO: add missing tables in the tracks and events definitions
     std::unordered_map<int, std::pair<float, int>> mCandidates;
     for (const auto& muon : muons) {
       if (static_cast<int>(muon.trackType()) < 2) {
@@ -1494,7 +1496,7 @@ struct TableMaker {
           muonprop = VarManager::PropagateMuon(muontrack, collision, VarManager::kToMatching);
         }
         std::vector<float> output;
-        std::vector<float> inputML = matchingMlResponse.getInputFeaturesGlob(muon, muonprop, mftprop, collision);
+        std::vector<float> inputML = matchingMlResponse.getInputFeatures(muon, mfttrack, muontrack, mftprop, muonprop, collision);
         matchingMlResponse.isSelectedMl(inputML, 0, output);
         float score = output[0];
         if (mCandidates.find(muonID) == mCandidates.end()) {
@@ -1508,7 +1510,7 @@ struct TableMaker {
     }
     for (auto& pairCand : mCandidates) {
       fBestMatch[pairCand.second.second] = true;
-    }
+    }*/
   }
 
   template <uint32_t TMuonFillMap, uint32_t TMFTFillMap, typename TEvent, typename TBCs, typename TMuons, typename TMFTTracks, typename TMFTCovs>
