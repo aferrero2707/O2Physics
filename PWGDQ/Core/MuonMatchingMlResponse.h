@@ -50,7 +50,7 @@
 // by calling the corresponding GETTER function
 #define CHECK_AND_FILL_FEATURE_OPTIONAL_NO_EXPR(FEATURE, OBJECT, GETTER) \
   case static_cast<uint8_t>(InputFeaturesMFTMuonMatch::FEATURE): {       \
-    if constexpr (requires(decltype(OBJECT) t) { { t.GETTER() } -> std::convertible_to<float>; }) { \
+    if constexpr (requires(decltype(OBJECT) t) { { t.GETTER() } -> std::convertible_to<float>; }) {                    \
       inputFeature = (OBJECT.GETTER());                                  \
     } else {                                                             \
       inputFeature = 0;                                                  \
@@ -65,7 +65,7 @@
 // by calling the corresponding GETTER expression
 #define CHECK_AND_FILL_FEATURE_OPTIONAL_WITH_EXPR(FEATURE, OBJECT, FUNC, GETTER) \
   case static_cast<uint8_t>(InputFeaturesMFTMuonMatch::FEATURE): {               \
-    if constexpr (requires(decltype(OBJECT) t) { { t.FUNC() } -> std::convertible_to<float>; }) { \
+    if constexpr (requires(decltype(OBJECT) t) { { t.FUNC() } -> std::convertible_to<float>; }) {                            \
       inputFeature = (GETTER);                                                   \
     } else {                                                                     \
       inputFeature = 0;                                                          \
