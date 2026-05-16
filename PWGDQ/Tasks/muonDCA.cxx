@@ -22,27 +22,22 @@
 #include "Framework/AnalysisTask.h"
 #include "Framework/runDataProcessing.h"
 #include "GlobalTracking/MatchGlobalFwd.h"
+#include "Common/DataModel/EventSelection.h"
 
 using namespace o2;
 using namespace o2::framework;
 using namespace o2::aod;
 
-using MyMuons = soa::Join<aod::ReducedMuons, aod::ReducedMuonsExtra, aod::ReducedMuonsCov>;
-using MyEvents = soa::Join<aod::ReducedEvents, aod::ReducedEventsExtended>;
-using MyEventsVtxCov = soa::Join<aod::ReducedEvents, aod::ReducedEventsExtended, aod::ReducedEventsVtxCov>;
+using ColEvSels = soa::Join<aod::Collisions, aod::EvSels, aod::Mults>;
+using BCsRun3 = soa::Join<aod::BCs, aod::Timestamps, aod::BcSels, aod::Run3MatchedToBCSparse>;
 
 // constexpr static uint32_t gkMuonDCAFillMapWithCov = VarManager::ObjTypes::ReducedMuon | VarManager::ObjTypes::ReducedMuonExtra | VarManager::ObjTypes::ReducedMuonCov | VarManager::ObjTypes::MuonDCA;
-
-constexpr static int toVertex = VarManager::kToVertex;
-constexpr static int toDCA = VarManager::kToDCA;
-constexpr static int toRabs = VarManager::kToRabs;
 
 static o2::globaltracking::MatchGlobalFwd mExtrap;
 template <typename T>
 bool isSelected(const T& muon);
 
 struct muonExtrap {
-  Produces<ReducedMuonsDca> dcaTable;
   Configurable<std::string> geoPath{"geoPath", "GLO/Config/GeometryAligned", "Path of the geometry file"};
   Configurable<std::string> grpmagPath{"grpmagPath", "GLO/Config/GRPMagField", "CCDB path of the GRPMagField object"};
   Configurable<std::string> fConfigCcdbUrl{"ccdb-url", "http://alice-ccdb.cern.ch", "url of the ccdb repository"};
@@ -50,6 +45,8 @@ struct muonExtrap {
   Service<o2::ccdb::BasicCCDBManager> fCCDB;
   o2::parameters::GRPMagField* grpmag = nullptr; // for run 3, we access GRPMagField from GLO/Config/GRPMagField
   int fCurrentRun;                               // needed to detect if the run changed and trigger update of magnetic field
+
+  o2::aod::rctsel::RCTFlagsChecker rctChecker{"CBT_muon_glo", false, true, true};
 
   HistogramRegistry registry{
     "registry",
@@ -67,6 +64,7 @@ struct muonExtrap {
       fCCDB->get<TGeoManager>(geoPath);
     }
 
+    AxisSpec collsAxis = {3, 0.0, 3.0, "number of collisions"};
     AxisSpec pdcaAxis = {5000, 0.0, 5000.0, "p #times DCA"};
     AxisSpec dcaAxis = {200, 0.0, 200.0, "DCA"};
     AxisSpec dcaxAxis = {200, -100.0, 100.0, "DCA_x"};
@@ -76,6 +74,7 @@ struct muonExtrap {
     AxisSpec yAxis = {200, -100., 100.0, "y (cm)"};
     AxisSpec zAxis = {200, -100., 100.0, "z (cm)"};
 
+    HistogramConfigSpec collsSpec({HistType::kTH1F, {collsAxis}});
     HistogramConfigSpec pdcaSpec({HistType::kTH1F, {pdcaAxis}});
     HistogramConfigSpec dcaSpec({HistType::kTH1F, {dcaAxis}});
     HistogramConfigSpec dcaxSpec({HistType::kTH1F, {dcaxAxis}});
@@ -85,6 +84,7 @@ struct muonExtrap {
     HistogramConfigSpec ySpec({HistType::kTH1F, {yAxis}});
     HistogramConfigSpec zSpec({HistType::kTH1F, {zAxis}});
 
+    registry.add("colls", "Collisions", collsSpec);
     registry.add("pdca", "pDCA", pdcaSpec);
     registry.add("dca", "DCA", dcaSpec);
     registry.add("dcax", "DCA_x", dcaxSpec);
@@ -101,93 +101,27 @@ struct muonExtrap {
     registry.add("zAtRabs", "z at end abs", zSpec);
   }
 
-  void processExtrapolation(MyEventsVtxCov::iterator const& collision, MyMuons const& muons)
+  void checkCollisions(
+      ColEvSels const& cols,
+      BCsRun3 const& bcs)
   {
-    if (fCurrentRun != collision.runNumber()) {
-      grpmag = fCCDB->getForTimeStamp<o2::parameters::GRPMagField>(grpmagPath, collision.timestamp());
-      if (grpmag != nullptr) {
-        LOGF(info, "Init field from GRP");
-        o2::base::Propagator::initFieldFromGRP(grpmag);
+    return;
+    //LOGF(info, "checkCollisions() called");
+    for (auto& col : cols) {
+      registry.get<TH1>(HIST("colls"))->Fill(0);
+      if (rctChecker(col)) {
+        registry.get<TH1>(HIST("colls"))->Fill(1);
+      } else {
+        auto bc = col.foundBC_as<BCsRun3>();
+        int64_t ts = bc.timestamp();
+        int runNumber = bc.runNumber();
+        //LOGF(info, "Bad collision found in run " + std::to_string(runNumber) + " at " + std::to_string(ts));
+        registry.get<TH1>(HIST("colls"))->Fill(2);
       }
-      LOGF(info, "Set field for muons");
-      VarManager::SetupMuonMagField();
-      fCurrentRun = collision.runNumber();
-    }
-
-    for (auto& muon : muons) {
-      if (static_cast<int>(muon.trackType()) < 2) {
-        continue; // Make sure to remove global muon tracks
-      }
-      // propagate muon track to vertex
-      o2::dataformats::GlobalFwdTrack muonTrackAtVertex = VarManager::PropagateMuon(muon, collision, toVertex);
-
-      // propagate muon track to DCA
-      o2::dataformats::GlobalFwdTrack muonTrackAtDCA = VarManager::PropagateMuon(muon, collision, toDCA);
-
-      // propagate to Rabs
-      o2::dataformats::GlobalFwdTrack muonTrackAtRabs = VarManager::PropagateMuon(muon, collision, toRabs);
-
-      // Calculate DCA quantities (preferable to do it with VarManager)
-      double dcax = muonTrackAtDCA.getX() - collision.posX();
-      double dcay = muonTrackAtDCA.getY() - collision.posY();
-      double dca = std::sqrt(dcax * dcax + dcay * dcay);
-      double pdca = muonTrackAtVertex.getP() * dca;
-      double xAtVtx = muonTrackAtVertex.getX();
-      double yAtVtx = muonTrackAtVertex.getY();
-      double zAtVtx = muonTrackAtVertex.getZ();
-      double xAtDCA = muonTrackAtDCA.getX();
-      double yAtDCA = muonTrackAtDCA.getY();
-      double zAtDCA = muonTrackAtDCA.getZ();
-      double xAbs = muonTrackAtRabs.getX();
-      double yAbs = muonTrackAtRabs.getY();
-      double zAbs = muonTrackAtRabs.getZ();
-
-      double rabs = std::sqrt(xAbs * xAbs + yAbs * yAbs);
-
-      // QA histograms
-      registry.get<TH1>(HIST("pdca"))->Fill(pdca);
-      registry.get<TH1>(HIST("dca"))->Fill(dca);
-      registry.get<TH1>(HIST("dcax"))->Fill(dcax);
-      registry.get<TH1>(HIST("dcay"))->Fill(dcay);
-      registry.get<TH1>(HIST("rabs"))->Fill(rabs);
-
-      registry.get<TH1>(HIST("xAtDCA"))->Fill(xAtDCA);
-      registry.get<TH1>(HIST("xAtRabs"))->Fill(xAbs);
-      registry.get<TH1>(HIST("xAtVtx"))->Fill(xAtVtx);
-
-      registry.get<TH1>(HIST("yAtDCA"))->Fill(yAtDCA);
-      registry.get<TH1>(HIST("yAtRabs"))->Fill(yAbs);
-      registry.get<TH1>(HIST("yAtVtx"))->Fill(yAtVtx);
-
-      registry.get<TH1>(HIST("zAtDCA"))->Fill(zAtDCA);
-      registry.get<TH1>(HIST("zAtRabs"))->Fill(zAbs);
-      registry.get<TH1>(HIST("zAtVtx"))->Fill(zAtVtx);
-
-      // Fill DCA table
-      dcaTable(pdca,
-               dca,
-               dcax,
-               dcay,
-               rabs,
-               muonTrackAtVertex.getPt(),
-               muonTrackAtVertex.getEta(),
-               muonTrackAtVertex.getPhi(),
-               muon.sign(),
-               muon.isAmbiguous(),
-               muonTrackAtVertex.getPx(),
-               muonTrackAtVertex.getPy(),
-               muonTrackAtVertex.getPz());
     }
   }
 
-  PROCESS_SWITCH(muonExtrap, processExtrapolation, "process extrapolation", false);
-
-  void processDummy(MyEventsVtxCov&)
-  {
-    // do nothing
-  }
-
-  PROCESS_SWITCH(muonExtrap, processDummy, "do nothing", false);
+  PROCESS_SWITCH(muonExtrap, checkCollisions, "check collisions", true);
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)

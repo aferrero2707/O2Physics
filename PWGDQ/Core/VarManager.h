@@ -889,7 +889,8 @@ class VarManager : public TObject
     // Index used to set different options for Muon propagation
     kToVertex = 0, // propagtion to vertex by default
     kToDCA,
-    kToRabs
+    kToRabs,
+    kToMatching
   };
 
   static TString fgVariableNames[kNVars];      // variable names
@@ -934,6 +935,17 @@ class VarManager : public TObject
   static void SetMagneticField(float magField)
   {
     fgMagField = magField;
+  }
+
+  // Setup plane position for MFT-MCH matching
+  static void SetMatchingPlane(float z)
+  {
+    fgzMatching = z;
+  }
+
+  static float GetMatchingPlane()
+  {
+    return fgzMatching;
   }
 
   // Setup the 2 prong KFParticle
@@ -1046,7 +1058,11 @@ class VarManager : public TObject
   }
 
   template <typename T, typename C>
+  static o2::track::TrackParCovFwd FwdToTrackPar(const T& track, const C& cov);
+  template <typename T, typename C>
   static o2::dataformats::GlobalFwdTrack PropagateMuon(const T& muon, const C& collision, int endPoint = kToVertex);
+  template <typename T, typename C>
+  static o2::track::TrackParCovFwd PropagateFwd(const T& track, const C& cov, float z);
   template <uint32_t fillMap, typename T, typename C>
   static void FillMuonPDca(const T& muon, const C& collision, float* values = nullptr);
   template <uint32_t fillMap, typename T, typename C>
@@ -1204,6 +1220,7 @@ class VarManager : public TObject
   static void SetVariableDependencies(); // toggle those variables on which other used variables might depend
 
   static float fgMagField;
+  static float fgzMatching;
   static float fgCenterOfMassEnergy;      // collision energy
   static float fgMassofCollidingParticle; // mass of the colliding particle
   static float fgTPCInterSectorBoundary;  // TPC inter-sector border size at the TPC outer radius, in cm
@@ -1247,6 +1264,19 @@ class VarManager : public TObject
 
   ClassDef(VarManager, 4);
 };
+
+template <typename T, typename C>
+o2::track::TrackParCovFwd VarManager::FwdToTrackPar(const T& track, const C& cov)
+{
+  double chi2 = track.chi2();
+  SMatrix5 tpars(track.x(), track.y(), track.phi(), track.tgl(), track.signed1Pt());
+  std::vector<double> v1{cov.cXX(), cov.cXY(), cov.cYY(), cov.cPhiX(), cov.cPhiY(),
+                         cov.cPhiPhi(), cov.cTglX(), cov.cTglY(), cov.cTglPhi(), cov.cTglTgl(),
+                         cov.c1PtX(), cov.c1PtY(), cov.c1PtPhi(), cov.c1PtTgl(), cov.c1Pt21Pt2()};
+  SMatrix55 tcovs(v1.begin(), v1.end());
+  o2::track::TrackParCovFwd trackparCov{track.z(), tpars, tcovs, chi2};
+  return trackparCov;
+}
 
 template <typename T, typename U, typename V>
 auto VarManager::getRotatedCovMatrixXX(const T& matrix, U phi, V theta)
@@ -1360,6 +1390,9 @@ o2::dataformats::GlobalFwdTrack VarManager::PropagateMuon(const T& muon, const C
     if (endPoint == kToRabs) {
       o2::mch::TrackExtrap::extrapToZ(mchTrack, -505.);
     }
+    if (endPoint == kToMatching) {
+      o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrack, fgzMatching);
+    }
 
     auto proptrack = mMatching.MCHtoFwd(mchTrack);
     propmuon.setParameters(proptrack.getParameters());
@@ -1378,6 +1411,14 @@ o2::dataformats::GlobalFwdTrack VarManager::PropagateMuon(const T& muon, const C
     propmuon.setCovariances(fwdtrack.getCovariances());
   }
   return propmuon;
+}
+
+template <typename T, typename C>
+o2::track::TrackParCovFwd VarManager::PropagateFwd(const T& track, const C& cov, float z)
+{
+  o2::track::TrackParCovFwd fwdtrack = FwdToTrackPar(track, cov);
+  fwdtrack.propagateToZhelix(z, fgMagField);
+  return fwdtrack;
 }
 
 template <uint32_t fillMap, typename T, typename C>

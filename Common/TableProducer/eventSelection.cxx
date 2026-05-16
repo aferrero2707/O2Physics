@@ -260,6 +260,8 @@ struct BcSelectionTask {
                    aod::FT0s const&,
                    aod::FDDs const&)
   {
+    static uint64_t nBcAll = 0, nBcFT0 = 0, nBcTVX = 0;
+
     if (bcs.size() == 0)
       return;
     bcsel.reserve(bcs.size());
@@ -342,6 +344,8 @@ struct BcSelectionTask {
         mapRCT = new std::map<uint64_t, uint32_t>;
         uint32_t dummyValue = 1u << 31; // setting bit 31 to indicate that rct object is missing
         mapRCT->insert(std::pair<uint64_t, uint32_t>(sorTimestamp, dummyValue));
+      } else {
+        std::cout << std::format("Loaded RCT object for run {} with {} flags", run, mapRCT->size()) << std::endl;
       }
     }
 
@@ -367,6 +371,7 @@ struct BcSelectionTask {
           itrct--;
         rct = itrct->second;
         LOGP(debug, "sor={} eor={} ts={} rct={}", sorTimestamp, eorTimestamp, bc.timestamp(), rct);
+        //std::cout << std::format("sor={} eor={} ts={} rct={}", sorTimestamp, eorTimestamp, bc.timestamp(), rct) << std::endl;
         lastRCT = rct;
         lastTF = thisTF;
       }
@@ -443,6 +448,10 @@ struct BcSelectionTask {
       selection |= !(std::fabs(timeZNC) > par->fZNCBGlower && std::fabs(timeZNC) < par->fZNCBGupper) ? BIT(kNoBGZNC) : 0;
       selection |= (bc.has_ft0() ? (bc.ft0().triggerMask() & BIT(o2::ft0::Triggers::bitVertex)) > 0 : 0) ? BIT(kIsTriggerTVX) : 0;
 
+      nBcAll += 1;
+      if (bc.has_ft0()) nBcFT0 += 1;
+      if (bc.has_ft0() && (bc.ft0().triggerMask() & BIT(o2::ft0::Triggers::bitVertex)) > 0) nBcTVX += 1;
+
       // check if bc is far from start and end of the ITS RO Frame border
       uint16_t bcInITSROF = (globalBC + nBCsPerOrbit - rofOffset) % rofLength;
       LOGP(debug, "bcInITSROF={}", bcInITSROF);
@@ -504,6 +513,10 @@ struct BcSelectionTask {
       // Fill bc selection columns
       bcsel(alias, selection, rct, foundFT0, foundFV0, foundFDD, foundZDC);
     }
+
+    std::cout << std::format("BC counters: all={}  FT0={} ({}%)  TVX={} ({}%)",
+        nBcAll, nBcFT0, (static_cast<double>(nBcFT0)/nBcAll) * 100.f,
+        nBcTVX, (static_cast<double>(nBcTVX)/nBcAll) * 100.f) << std::endl;
   }
   PROCESS_SWITCH(BcSelectionTask, processRun3, "Process Run3 event selection", false);
 };
@@ -617,6 +630,10 @@ struct EventSelectionTask {
     histos.add("hColCounterAll", "", kTH1D, {{1, 0., 1.}});
     histos.add("hColCounterTVX", "", kTH1D, {{1, 0., 1.}});
     histos.add("hColCounterAcc", "", kTH1D, {{1, 0., 1.}});
+
+    histos.add("hColBcAll", "", kTH1D, {{3564, 0., 3564.}});
+    histos.add("hColBcTVX", "", kTH1D, {{3564, 0., 3564.}});
+    histos.add("hColBcAcc", "", kTH1D, {{3564, 0., 3564.}});
   }
 
   void process(aod::Collisions const& collisions)
@@ -1157,13 +1174,19 @@ struct EventSelectionTask {
       // TODO introduce array of sel[0]... sel[8] or similar?
       bool sel8 = bc.selection_bit(kIsTriggerTVX) && bc.selection_bit(kNoTimeFrameBorder) && bc.selection_bit(kNoITSROFrameBorder);
 
+      uint64_t orbit = bc.globalBC() / 3564;
+      uint64_t bcInOrbit = bc.globalBC() % 3564;
+
       // fill counters
       histos.get<TH1>(HIST("hColCounterAll"))->Fill(Form("%d", bc.runNumber()), 1);
+      histos.get<TH1>(HIST("hColBcAll"))->Fill(bcInOrbit);
       if (bc.selection_bit(kIsTriggerTVX)) {
         histos.get<TH1>(HIST("hColCounterTVX"))->Fill(Form("%d", bc.runNumber()), 1);
+        histos.get<TH1>(HIST("hColBcTVX"))->Fill(bcInOrbit);
       }
       if (sel8) {
         histos.get<TH1>(HIST("hColCounterAcc"))->Fill(Form("%d", bc.runNumber()), 1);
+        histos.get<TH1>(HIST("hColBcAcc"))->Fill(bcInOrbit);
       }
 
       evsel(alias, selection, rct, sel7, sel8, foundBC, foundFT0, foundFV0, foundFDD, foundZDC,

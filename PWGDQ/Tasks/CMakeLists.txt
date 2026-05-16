@@ -128,3 +128,28 @@ o2physics_add_dpl_workflow(tag-and-probe
                     SOURCES TagAndProbe.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2::DetectorsBase O2Physics::AnalysisCore O2Physics::AnalysisCCDB O2Physics::PWGDQCore
                     COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(qa-matching
+                    SOURCES qaMatching.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore
+                    COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(qa-matching-dev
+                    SOURCES qaMatchingDev.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore
+                    COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(muon-qa-dev
+                    SOURCES qaMuonDev.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore
+                    COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(mft-mch-matcher
+                    SOURCES mftMchMatcher.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore
+                    COMPONENT_NAME Analysis)
+
+o2physics_add_dpl_workflow(muon-global-alignment
+                    SOURCES muonGlobalAlignment.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore O2::MCHGeometryTransformer
+                    COMPONENT_NAME Analysis)
