@@ -737,6 +737,158 @@ struct mftMchMatcher {
   }
 
   PROCESS_SWITCH(mftMchMatcher, processMC, "process_MC", true);
+
+  void processRD(MyEvents const& collisions,
+                 aod::BCsWithTimestamps const& bcs,
+                 MyMuonsWithCov const& muonTracks,
+                 MyMFTs const& /*mftTracks*/,
+                 MyMFTCovariances const& mftCovs)
+  {
+    static std::ofstream debugStr("matching.txt");
+    if (bcs.size() > 0) {
+      auto bc = bcs.begin();
+      initCCDB(bc);
+      VarManager::SetMatchingPlane(fzMatching.value);
+    }
+
+    registry.get<TH1>(HIST("acceptedEvents"))->Fill(0);
+    // reject a randomly selected fraction of events
+    if (fSamplingFraction < 1.0) {
+      double rnd = mDistribution(mGenerator);
+      if (rnd > fSamplingFraction) {
+        return;
+      }
+    }
+    registry.get<TH1>(HIST("acceptedEvents"))->Fill(1);
+
+    fillBestMuonMatches(muonTracks);
+
+    mftCovIndexes.clear();
+    for (auto& mftTrackCov : mftCovs) {
+      mftCovIndexes[mftTrackCov.matchMFTTrackId()] = mftTrackCov.globalIndex();
+    }
+
+    fwdMatchMLCandidates.reserve(muonTracks.size());
+
+    for (auto muon : muonTracks) {
+      // only consider global MFT-MCH-MID matches
+      if (static_cast<int>(muon.trackType()) != 0) {
+        continue;
+      }
+
+      if (!muon.has_collision()) {
+        continue;
+      }
+
+      bool isBestMatch = fBestMatch.find(muon.globalIndex()) != fBestMatch.end();
+
+      if (fKeepBestMatch && !isBestMatch) {
+        continue;
+      }
+
+      const auto& collision = collisions.rawIteratorAt(muon.collisionId());
+      auto bc_coll = collision.bc_as<aod::BCsWithTimestamps>();
+
+      auto muontrack = muon.template matchMCHTrack_as<MyMuonsMC>();
+      auto mfttrack = muon.template matchMFTTrack_as<MyMFTsMC>();
+      auto const& mfttrackcov = mftCovs.rawIteratorAt(mftCovIndexes[mfttrack.globalIndex()]);
+
+      auto muonTime = muontrack.trackTime() + bc_coll.globalBC() * o2::constants::lhc::LHCBunchSpacingNS;
+      auto mftTime = mfttrack.trackTime() + bc_coll.globalBC() * o2::constants::lhc::LHCBunchSpacingNS;
+
+      o2::track::TrackParCovFwd mftprop = VarManager::FwdToTrackPar(mfttrack, mfttrackcov);
+      o2::track::TrackParCovFwd muonprop = VarManager::FwdToTrackPar(muontrack, muontrack);
+      if (fzMatching.value < 0.) {
+        mftprop = VarManager::PropagateFwd(mfttrack, mfttrackcov, fzMatching.value);
+        muonprop = VarManager::PropagateMuon(muontrack, collision, VarManager::kToMatching);
+      }
+      auto muonpropCov = muonprop.getCovariances();
+      auto mftpropCov = mftprop.getCovariances();
+
+      if (!IsGoodMuon(muontrack, collision, fTrackChi2MchUp, fPMchLow, fPtMchLow, {fEtaMFTLow, fEtaMFTUp}, {fRabsLow, fRabsUp}, fSigmaPdcaUp)) {
+        continue;
+      }
+
+      // at this level we consider all the matching candidates, regardless of the MFT tracks quality
+      // MFT track quality cuts should be applied only after having selected the best candidate
+      // if (!IsGoodMFT(mfttrack, fTrackChi2MFTUp, fPtMFTLow, {fEtaMFTLow, fEtaMFTUp})){
+      //  continue;
+      //}
+
+      bool IsAmbig = (muon.compatibleCollIds().size() != 1);
+      int MFTMult = collision.mftNtracks();
+
+      auto matchType = kMatchTypeUndefined;
+      bool isSignal = false;
+
+      debugStr << std::format("{} C={} MCH={} MUON={} TYPE={} CHI2={}", bc_coll.globalBC(), collision.globalIndex(), muontrack.globalIndex(), muon.globalIndex(), static_cast<int>(matchType), muon.chi2MatchMCHMFT()) << std::endl;
+
+      fwdMatchMLCandidates(
+        muonprop.getX(),
+        muonprop.getY(),
+        muonprop.getPhi(),
+        muonprop.getTgl(),
+        muonprop.getInvQPt(),
+        muonTime,
+        muontrack.trackTimeRes(),
+        muontrack.chi2(),
+        muontrack.pDca(),
+        muontrack.rAtAbsorberEnd(),
+        muonpropCov(0, 0),
+        muonpropCov(1, 1),
+        muonpropCov(2, 2),
+        muonpropCov(3, 3),
+        muonpropCov(4, 4),
+        muonpropCov(1, 0),
+        muonpropCov(2, 1),
+        muonpropCov(2, 0),
+        muonpropCov(3, 0),
+        muonpropCov(3, 1),
+        muonpropCov(3, 2),
+        muonpropCov(4, 0),
+        muonpropCov(4, 1),
+        muonpropCov(4, 2),
+        muonpropCov(4, 3),
+        mftprop.getX(),
+        mftprop.getY(),
+        mftprop.getPhi(),
+        mftprop.getTgl(),
+        mftprop.getInvQPt(),
+        mftTime,
+        mfttrack.trackTimeRes(),
+        mfttrack.chi2(),
+        mfttrack.mftClusterSizesAndTrackFlags(),
+        (mfttrack.isCA() ? 1 : 0),
+        mftpropCov(0, 0),
+        mftpropCov(1, 1),
+        mftpropCov(2, 2),
+        mftpropCov(3, 3),
+        mftpropCov(4, 4),
+        mftpropCov(1, 0),
+        mftpropCov(2, 1),
+        mftpropCov(2, 0),
+        mftpropCov(3, 0),
+        mftpropCov(3, 1),
+        mftpropCov(3, 2),
+        mftpropCov(4, 0),
+        mftpropCov(4, 1),
+        mftpropCov(4, 2),
+        mftpropCov(4, 3),
+        muon.chi2(),
+        muon.chi2MatchMCHMFT(),
+        muon.fwdDcaX(),
+        muon.fwdDcaY(),
+        IsAmbig,
+        MFTMult,
+        0, //muontrack.mcMask(),
+        0, //mfttrack.mcMask(),
+        0, //muon.mcMask(),
+        static_cast<int>(matchType),
+        isSignal);
+    }
+  }
+
+  PROCESS_SWITCH(mftMchMatcher, processRD, "process_RD", true);
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
