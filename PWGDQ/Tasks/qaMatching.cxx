@@ -930,7 +930,6 @@ struct QaMatching {
       histTitle = "Match type vs. p_{T}";
       fMatchTypeVsPt = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH2F, {ptAxis, matchTypeAxis}});
       SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis());
-      //}
 
       histName = path + "matchChi2VsType";
       histTitle = "Match #chi^{2} vs. match type";
@@ -3200,14 +3199,14 @@ struct QaMatching {
         taggedMatchingCandidates[mchIndex] = globalTracksVector;
       }
     }
+    matchingMethodCounter += 1;
+    fillQaMatchingAodTablesForCollision(collision, muonTracks, collisionInfo.matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId);
     //std::cout << "fillMatchingPlotsMc for tagged" << std::endl;
     if constexpr (isMC) {
       fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMatchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, cfgMatchingChi2ScoreMftMchLow, fTaggedMuonsMatchingPlotter.get());
     } else {
       fillMatchingPlots(collision, collisionInfo, muonTracks, mftTracks, taggedMatchingCandidates, collisionInfo.matchingCandidates, cfgMatchingChi2ScoreMftMchLow, fTaggedMuonsMatchingPlotter.get(), false);
     }
-    matchingMethodCounter += 1;
-    fillQaMatchingAodTablesForCollision(collision, muonTracks, collisionInfo.matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId);
 
     //-------------------------------
     // Custom chi2-based matching methods
@@ -3251,7 +3250,7 @@ struct QaMatching {
 
     //-------------------------------
     // Di-muon analysis
-    //fillDimuonPlotsMc(collisionInfo, collisions, muonTracks, mftTracks);
+    fillDimuonPlotsMc(collisionInfo, collisions, muonTracks, mftTracks);
   }
 
   template <class TCOLLISION, class TMUON>
