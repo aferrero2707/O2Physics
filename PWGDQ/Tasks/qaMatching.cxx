@@ -183,6 +183,19 @@ static float chi2ToScore(float chi2, int ndf, float chi2max)
   return static_cast<float>(result);
 }
 
+static void SetMatchTypeAxisLabels(TAxis* axis)
+{
+  axis->SetBinLabel(1, "true (leading)");
+  axis->SetBinLabel(2, "wrong (leading)");
+  axis->SetBinLabel(3, "decay (leading)");
+  axis->SetBinLabel(4, "fake (leading)");
+  axis->SetBinLabel(5, "true (non leading)");
+  axis->SetBinLabel(6, "wrong (non leading)");
+  axis->SetBinLabel(7, "decay (non leading)");
+  axis->SetBinLabel(8, "fake (non leading)");
+  axis->SetBinLabel(9, "unknown");
+}
+
 struct QaMatching {
 
   template <class T, int nr, int nc>
@@ -908,113 +921,42 @@ struct QaMatching {
       histName = path + "matchType";
       histTitle = "Match type";
       fMatchType = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH1F, {matchTypeAxis}});
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH1>>(fMatchType)->GetXaxis());
       histName = path + "matchTypeVsP";
       histTitle = "Match type vs. p";
       fMatchTypeVsP = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH2F, {pAxis, matchTypeAxis}});
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH2>>(fMatchTypeVsP)->GetYaxis());
       histName = path + "matchTypeVsPt";
       histTitle = "Match type vs. p_{T}";
       fMatchTypeVsPt = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH2F, {ptAxis, matchTypeAxis}});
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH2>>(fMatchTypeVsPt)->GetYaxis());
+      //}
 
       histName = path + "matchChi2VsType";
       histTitle = "Match #chi^{2} vs. match type";
       fMatchChi2VsType = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH2F, {matchTypeAxis, chi2Axis}});
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH2>>(fMatchChi2VsType)->GetXaxis());
       histName = path + "matchChi2VsTypeVsP";
       histTitle = "Match #chi^{2} vs. match type vs. p";
       fMatchChi2VsTypeVsP = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH3F, {pAxis, matchTypeAxis, chi2Axis}});
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsP)->GetYaxis());
       histName = path + "matchChi2VsTypeVsPt";
       histTitle = "Match #chi^{2} vs. match type vs. p_{T}";
       fMatchChi2VsTypeVsPt = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH3F, {ptAxis, matchTypeAxis, chi2Axis}});
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH3>>(fMatchChi2VsTypeVsPt)->GetYaxis());
       //-
       histName = path + "matchScoreVsType";
       histTitle = "Match score vs. match type";
       fMatchScoreVsType = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH2F, {matchTypeAxis, scoreAxis}});
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH2>>(fMatchScoreVsType)->GetXaxis());
       histName = path + "matchScoreVsTypeVsP";
       histTitle = "Match score vs. match type vs. p";
       fMatchScoreVsTypeVsP = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH3F, {pAxis, matchTypeAxis, scoreAxis}});
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsP)->GetYaxis());
       histName = path + "matchScoreVsTypeVsPt";
       histTitle = "Match score vs. match type vs. p_{T}";
       fMatchScoreVsTypeVsPt = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH3F, {ptAxis, matchTypeAxis, scoreAxis}});
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(1, "true (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(2, "wrong (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(3, "decay (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(4, "fake (leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(5, "true (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(6, "wrong (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(7, "decay (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(8, "fake (non leading)");
-      std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis()->SetBinLabel(9, "undefined");
+      SetMatchTypeAxisLabels(std::get<std::shared_ptr<TH3>>(fMatchScoreVsTypeVsPt)->GetYaxis());
 
       AxisSpec prodScoreAxis = {100, 0, 1, "matching score (prod)"};
       histName = path + "matchScoreVsProd";
@@ -1319,7 +1261,7 @@ struct QaMatching {
     // This is needed in order to associate the proper label to the match method index in the derived tables.
     AxisSpec matchMethodAxis = {static_cast<int>(matchMethodLabels.size()), 0.0, static_cast<double>(matchMethodLabels.size()), ""};
     auto matchMethodsHist = registry.add("matchMethods", "Match methods", {HistType::kTH1F, {matchMethodAxis}});
-    for (int iLabel = 0; iLabel <= matchMethodLabels.size(); iLabel++) {
+    for (size_t iLabel = 0; iLabel < matchMethodLabels.size(); iLabel++) {
       std::get<std::shared_ptr<TH1>>(matchMethodsHist)->GetXaxis()->SetBinLabel(iLabel + 1, matchMethodLabels[iLabel].c_str());
     }
 
