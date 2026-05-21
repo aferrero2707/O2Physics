@@ -281,6 +281,10 @@ struct QaMatching {
   Configurable<float> cfgMuonTaggingRabsLow{"cfgMuonTaggingRabsLow", 17.6f, ""};
   Configurable<float> cfgMuonTaggingRabsUp{"cfgMuonTaggingRabsUp", 89.5f, ""};
   Configurable<float> cfgMuonTaggingPdcaUp{"cfgMuonTaggingPdcaUp", 4.f, ""};
+  Configurable<float> cfgMuonTaggingRadiusAtMftFrontLow{"cfgMuonTaggingRadiusAtMftFrontLow", 3.f, ""};
+  Configurable<float> cfgMuonTaggingRadiusAtMftFrontUp{"cfgMuonTaggingRadiusAtMftFrontUp", 9.f, ""};
+  Configurable<float> cfgMuonTaggingRadiusAtMftBackLow{"cfgMuonTaggingRadiusAtMftBackLow", 5.f, ""};
+  Configurable<float> cfgMuonTaggingRadiusAtMftBackUp{"cfgMuonTaggingRadiusAtMftBackUp", 12.f, ""};
   Configurable<float> cfgMuonTaggingChi2DiffLow{"cfgMuonTaggingChi2DiffLow", 100.f, ""};
 
   ////   Variables for ccdb
@@ -1923,17 +1927,13 @@ struct QaMatching {
       // propagate the track from the vertex to the first MFT plane
       const auto& extrapToMFTfirst = propagateToZMch(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[0]);
       double rFront = std::sqrt(extrapToMFTfirst.getX() * extrapToMFTfirst.getX() + extrapToMFTfirst.getY() * extrapToMFTfirst.getY());
-      double rMinFront = 3.f;
-      double rMaxFront = 9.f;
-      if (rFront < rMinFront || rFront > rMaxFront)
+      if (rFront < cfgMuonTaggingRadiusAtMftFrontLow.value || rFront > cfgMuonTaggingRadiusAtMftFrontUp.value)
         continue;
 
       // propagate the track from the vertex to the last MFT plane
       const auto& extrapToMFTlast = propagateToZMch(mchTrackAtVertex, o2::mft::constants::mft::LayerZCoordinate()[9]);
       double rBack = std::sqrt(extrapToMFTlast.getX() * extrapToMFTlast.getX() + extrapToMFTlast.getY() * extrapToMFTlast.getY());
-      double rMinBack = 5.f;
-      double rMaxBack = 12.f;
-      if (rBack < rMinBack || rBack > rMaxBack)
+      if (rBack < cfgMuonTaggingRadiusAtMftBackLow.value || rBack > cfgMuonTaggingRadiusAtMftBackUp.value)
         continue;
 
       int64_t muonTrackIndex = muonTrack.globalIndex();
