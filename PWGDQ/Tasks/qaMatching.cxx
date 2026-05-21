@@ -101,6 +101,7 @@ DECLARE_SOA_COLUMN(MatchRanking, matchRanking, int32_t);
 DECLARE_SOA_COLUMN(MftMultiplicity, mftMultiplicity, int32_t);
 DECLARE_SOA_COLUMN(TrackType, trackType, int8_t);
 DECLARE_SOA_COLUMN(MftMatchAttempts, mftMatchAttempts, int32_t);
+DECLARE_SOA_COLUMN(IsTagged, isTagged, bool);
 DECLARE_SOA_COLUMN(XAtVtx, xAtVtx, float);
 DECLARE_SOA_COLUMN(YAtVtx, yAtVtx, float);
 DECLARE_SOA_COLUMN(ZAtVtx, zAtVtx, float);
@@ -139,6 +140,7 @@ DECLARE_SOA_TABLE(QaMatchingMCHTrack, "AOD", "QAMCHTRK",
                   qamatching::Eta,
                   qamatching::Phi,
                   qamatching::MftMatchAttempts,
+                  qamatching::IsTagged,
                   qamatching::XAtVtx,
                   qamatching::YAtVtx,
                   qamatching::ZAtVtx,
@@ -978,7 +980,6 @@ struct QaMatching {
   std::map<std::string, std::unique_ptr<HistogramRegistry>> fMatchingHistogramRegistries;
   std::map<std::string, std::unique_ptr<MatchingPlotter>> fMatchingPlotters;
   std::unique_ptr<MatchingPlotter> fTaggedMuonsMatchingPlotter;
-  std::unique_ptr<MatchingPlotter> fSelectedMuonsMatchingPlotter;
 
   CollisionInfos fCollisionInfos;
 
@@ -1038,7 +1039,6 @@ struct QaMatching {
     }
 
     fTaggedMuonsMatchingPlotter = std::make_unique<MatchingPlotter>(histPath + "Tagged/", &registryMatching, configQas.cfgCreatePdgMomHistograms, cfgMftTrackMultiplicityMax, cfgNCandidatesMax);
-    fSelectedMuonsMatchingPlotter = std::make_unique<MatchingPlotter>(histPath + "Selected/", &registryMatching, configQas.cfgCreatePdgMomHistograms, cfgMftTrackMultiplicityMax, cfgNCandidatesMax);
   }
 
   void createDimuonHistos()
@@ -1194,7 +1194,7 @@ struct QaMatching {
       ccdbManager->get<TGeoManager>(geoPath);
     }
 
-    std::vector<std::string> matchMethodLabels{"Prod", "Tagged"};
+    std::vector<std::string> matchMethodLabels{"Prod"};
 
     // Matching functions
     initMatchingFunctions();
@@ -1883,14 +1883,14 @@ struct QaMatching {
     return result;
   }
 
-  // for each MCH standalone track, collect the associated matching candidates
+  // tag muons based on the track quality and the track position at the front and back MFT planes
   template <class TMUON, class C>
-  void getSelectedMuons(const CollisionInfo& collisionInfo,
-                        C const& collisions,
-                        TMUON const& muonTracks,
-                        std::vector<int64_t>& selectedMuons)
+  void getTaggedMuons(const CollisionInfo& collisionInfo,
+                      C const& collisions,
+                      TMUON const& muonTracks,
+                      std::vector<int64_t>& taggedMuons)
   {
-    selectedMuons.clear();
+    taggedMuons.clear();
     for (const auto& muonTrack : muonTracks) {
 
       // only consider MCH-MID matches
@@ -1937,10 +1937,10 @@ struct QaMatching {
         continue;
 
       int64_t muonTrackIndex = muonTrack.globalIndex();
-      selectedMuons.emplace_back(muonTrackIndex);
+      taggedMuons.emplace_back(muonTrackIndex);
     }
   }
-
+/*
   // for each MCH standalone track, collect the associated matching candidates
   template <class TMUON>
   void getTaggedMuons(const CollisionInfo& collisionInfo,
@@ -1971,7 +1971,7 @@ struct QaMatching {
       taggedMuons.emplace_back(mchIndex);
     }
   }
-
+*/
   void getMuonPairs(const CollisionInfo& collisionInfo,
                     std::vector<MuonPair>& muonPairs,
                     std::vector<GlobalMuonPair>& globalMuonPairs)
@@ -3136,15 +3136,20 @@ struct QaMatching {
   {
     auto collision = collisions.rawIteratorAt(collisionInfo.index);
 
+    std::vector<int64_t> taggedMuons;
+    getTaggedMuons(collisionInfo, collisions, muonTracks, taggedMuons);
+
     int debugCounter{0};
     fillQaMatchingAodEventForCollision(collisionInfo, collision, collisionInfo.reducedEventId, debugCounter);
-    fillQaMatchingMchTracksForCollision(collisionInfo, collisions, collision, muonTracks, mftTracks, bcs, collisionInfo.reducedEventId);
+    fillQaMatchingMchTracksForCollision(collisionInfo, collisions, collision, muonTracks, mftTracks, bcs, taggedMuons, collisionInfo.reducedEventId);
 
     registry.get<TH1>(HIST("tracksMultiplicityMFT"))->Fill(collisionInfo.mftTracks.size());
     registry.get<TH1>(HIST("tracksMultiplicityMCH"))->Fill(collisionInfo.mchTracks.size());
 
     int matchingMethodCounter{0};
-    // Chi2-based matching analysis
+
+    //-------------------------------
+    // Chi2-based matching from production
     fillQaMatchingAodTablesForCollision(collision, muonTracks, collisionInfo.matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId);
     std::cout << "fillMatchingPlotsMc for Prod" << std::endl;
     if constexpr (isMC) {
@@ -3154,7 +3159,8 @@ struct QaMatching {
     }
     //return;
 
-    // Muons tagging
+    //-------------------------------
+    // Tagged muons
     for (const auto& [mchIndex, mftIndex] : collisionInfo.matchablePairs) {
       auto const& mchTrack = muonTracks.rawIteratorAt(mchIndex);
       if (!mchTrack.has_collision())
@@ -3178,29 +3184,12 @@ struct QaMatching {
       registry.get<TH2>(HIST("matching/MC/pairedMFTTracksAtMFT"))->Fill(mftTrackProp.getX(), mftTrackProp.getY());
     }
 
-    std::vector<int64_t> selectedMuons;
-    getSelectedMuons(collisionInfo, collisions, muonTracks, selectedMuons);
-
-    MatchingCandidates selectedMatchingCandidates;
-    for (const auto& [mchIndex, globalTracksVector] : collisionInfo.matchingCandidates) {
-      if (std::find(selectedMuons.begin(), selectedMuons.end(), mchIndex) != selectedMuons.end()) {
-        selectedMatchingCandidates[mchIndex] = globalTracksVector;
-      }
-    }
-    //std::cout << "fillMatchingPlotsMc for selected" << std::endl;
-    //fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, selectedMatchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, cfgMatchingChi2ScoreMftMchLow, fSelectedMuonsMatchingPlotter.get());
-
-    std::vector<int64_t> taggedMuons;
-    getTaggedMuons(collisionInfo, muonTracks, selectedMuons, taggedMuons);
-
     MatchingCandidates taggedMatchingCandidates;
     for (const auto& [mchIndex, globalTracksVector] : collisionInfo.matchingCandidates) {
       if (std::find(taggedMuons.begin(), taggedMuons.end(), mchIndex) != taggedMuons.end()) {
         taggedMatchingCandidates[mchIndex] = globalTracksVector;
       }
     }
-    matchingMethodCounter += 1;
-    fillQaMatchingAodTablesForCollision(collision, muonTracks, collisionInfo.matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId);
     //std::cout << "fillMatchingPlotsMc for tagged" << std::endl;
     if constexpr (isMC) {
       fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMatchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, cfgMatchingChi2ScoreMftMchLow, fTaggedMuonsMatchingPlotter.get());
@@ -3320,6 +3309,7 @@ struct QaMatching {
                                            TMUON const& muonTracks,
                                            TMFT const& mftTracks,
                                            TBC const& bcs,
+                                           const std::vector<int64_t>& taggedMuons,
                                            int32_t reducedEventId)
   {
     std::vector<int64_t> mchIds;
@@ -3339,6 +3329,10 @@ struct QaMatching {
       auto const& mchTrack = muonTracks.rawIteratorAt(mchIndex);
       int mftMchMatchAttempts = getMftMchMatchAttempts(collisions, bcs, mchTrack, mftTracks);
       auto mchTrackAtVertex = VarManager::PropagateMuon(mchTrack, collision, VarManager::kToVertex);
+      bool isTagged = false;
+      if (std::find(taggedMuons.begin(), taggedMuons.end(), mchIndex) != taggedMuons.end()) {
+        isTagged = true;
+      }
       qaMatchingMCHTrack(
         reducedEventId,
         mchIndex,
@@ -3348,6 +3342,7 @@ struct QaMatching {
         static_cast<float>(mchTrack.eta()),
         static_cast<float>(mchTrack.phi()),
         static_cast<int32_t>(mftMchMatchAttempts),
+        isTagged,
         static_cast<float>(mchTrackAtVertex.getX()),
         static_cast<float>(mchTrackAtVertex.getY()),
         static_cast<float>(mchTrackAtVertex.getZ()),
