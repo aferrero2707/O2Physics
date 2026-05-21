@@ -1940,38 +1940,7 @@ struct QaMatching {
       taggedMuons.emplace_back(muonTrackIndex);
     }
   }
-/*
-  // for each MCH standalone track, collect the associated matching candidates
-  template <class TMUON>
-  void getTaggedMuons(const CollisionInfo& collisionInfo,
-                      TMUON const& muonTracks,
-                      const std::vector<int64_t>& selectedMuons,
-                      std::vector<int64_t>& taggedMuons)
-  {
-    taggedMuons.clear();
-    for (const auto& [mchIndex, globalTracksVector] : collisionInfo.matchingCandidates) {
 
-      // check if the current muon is selected
-      if (std::find(selectedMuons.begin(), selectedMuons.end(), mchIndex) == selectedMuons.end())
-        continue;
-
-      // if there is only one candidate, mark the muon as select
-      if (globalTracksVector.size() == 1) {
-        taggedMuons.emplace_back(mchIndex);
-        continue;
-      }
-
-      auto const& muonTrack0 = muonTracks.rawIteratorAt(globalTracksVector[0].globalTrackId);
-      auto const& muonTrack1 = muonTracks.rawIteratorAt(globalTracksVector[1].globalTrackId);
-
-      double chi2diff = muonTrack1.chi2MatchMCHMFT() - muonTrack0.chi2MatchMCHMFT();
-      if (chi2diff < cfgMuonTaggingChi2DiffLow)
-        continue;
-
-      taggedMuons.emplace_back(mchIndex);
-    }
-  }
-*/
   void getMuonPairs(const CollisionInfo& collisionInfo,
                     std::vector<MuonPair>& muonPairs,
                     std::vector<GlobalMuonPair>& globalMuonPairs)
