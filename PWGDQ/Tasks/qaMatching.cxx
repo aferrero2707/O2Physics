@@ -2005,7 +2005,7 @@ struct QaMatching {
         collisionInfo.bc = bc.globalBC();
         collisionInfo.zVertex = collision.posZ();
 
-        if constexpr ( isMC ) {
+        if constexpr (isMC) {
           if (collisionInfo.matchablePairs.empty()) {
             fillMatchablePairs(collisionInfo, muonTracks, mftTracks);
           }
