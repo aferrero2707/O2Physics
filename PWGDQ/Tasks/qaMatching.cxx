@@ -3497,6 +3497,7 @@ struct QaMatching {
       int64_t reducedMchTrackId = reducedMchTrackIdIt->second;
 
       for (const auto& candidate : candidates) {
+        const auto& candidateTrack = muonTracks.rawIteratorAt(candidate.globalTrackId);
         const auto& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
         // propagate global forward track to vertex using momentum rescaling method
         auto candidateTrackAtVertex = propagateToVertexMft(mftTrack, mchTrack, collision);
@@ -3504,10 +3505,10 @@ struct QaMatching {
           reducedEventId,
           reducedMchTrackId,
           matchLabel,
-          static_cast<float>(mchTrack.p()),
-          static_cast<float>(mchTrack.pt()),
-          static_cast<float>(mchTrack.eta()),
-          static_cast<float>(mchTrack.phi()),
+          static_cast<float>(candidateTrack.p()),
+          static_cast<float>(candidateTrack.pt()),
+          static_cast<float>(candidateTrack.eta()),
+          static_cast<float>(candidateTrack.phi()),
           static_cast<int8_t>(candidate.matchType),
           static_cast<float>(candidate.matchChi2),
           static_cast<float>(candidate.matchScore),
