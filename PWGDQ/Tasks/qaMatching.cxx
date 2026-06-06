@@ -110,6 +110,7 @@ DECLARE_SOA_COLUMN(ZAtVtx, zAtVtx, float);
 DECLARE_SOA_COLUMN(PxAtVtx, pxAtVtx, float);
 DECLARE_SOA_COLUMN(PyAtVtx, pyAtVtx, float);
 DECLARE_SOA_COLUMN(PzAtVtx, pzAtVtx, float);
+DECLARE_SOA_COLUMN(Bc, bc, int64_t);
 DECLARE_SOA_COLUMN(ColX, colX, float);
 DECLARE_SOA_COLUMN(ColY, colY, float);
 DECLARE_SOA_COLUMN(ColZ, colZ, float);
@@ -119,6 +120,7 @@ namespace o2::aod
 {
 DECLARE_SOA_TABLE(QaMatchingEvents, "AOD", "QAMEVT",
                   o2::soa::Index<>,
+                  qamatching::Bc,
                   qamatching::MftMultiplicity,
                   qamatching::ColX,
                   qamatching::ColY,
@@ -213,6 +215,8 @@ static void setMatchTypeAxisLabels(TAxis* axis)
   axis->SetBinLabel(8, "fake (non leading)");
   axis->SetBinLabel(9, "unknown");
 }
+
+
 
 struct QaMatching {
 
@@ -685,14 +689,14 @@ struct QaMatching {
     o2::framework::HistPtr hDeltaEta;
     o2::framework::HistPtr hRabs;
 
-    MatchFeaturesHistos(std::string path, HistogramRegistry* registry, int numCandidates)
+    MatchFeaturesHistos(std::string path, HistogramRegistry* registry, int numCandidates, double scoreMax)
     {
       AxisSpec indexAxis = {numCandidates, 0, static_cast<double>(numCandidates), "ranking index"};
-      AxisSpec scoreAxis = {100, 0, 1, "match score"};
       int matchTypeMax = static_cast<int>(kMatchTypeUndefined) + 1;
       AxisSpec matchTypeAxis = {matchTypeMax, 0, static_cast<double>(matchTypeMax), "match type"};
       AxisSpec taggedAxis = {2, 0, 2.0, "is tagged"};
-      AxisSpec scoreGapAxis = {100, 0, 1.0, "match score gap"};
+      AxisSpec scoreAxis = {100, 0, scoreMax, "match score"};
+      AxisSpec scoreGapAxis = {100, 0, scoreMax, "match score gap"};
       AxisSpec logpAxis = {16, -1, 3, "log_{10}(p)"};
       AxisSpec dxAxis = {100, -20, 20, "#Deltax (cm)"};
       AxisSpec dyAxis = {100, -20, 20, "#Deltay (cm)"};
@@ -824,7 +828,7 @@ struct QaMatching {
       std::string histName;
       std::string histTitle;
 
-      fMatchFeaturesGoodMCH = std::make_unique<MatchFeaturesHistos>(path + "matchFeaturesGoodMCH", registry, numCandidates);
+      fMatchFeaturesGoodMCH = std::make_unique<MatchFeaturesHistos>(path + "matchFeaturesGoodMCH", registry, numCandidates, 100);
 
       if (isMc) {
         fMatchRanking = std::make_unique<MatchRankingHistos>(path + "matchRanking", "True match ranking", registry, mftMultMax, numCandidates);
@@ -2242,13 +2246,13 @@ struct QaMatching {
         isTagged = 1;
       }
 
-      float scoreGap = 0;
+      float chi2Gap = 0;
       if (globalTracksVector.size() > 1) {
         // we have at least two candidates, so we can check the score difference
         // between the leading and the sub-leading
-        auto leadingScore = globalTracksVector[0].matchScore;
-        auto subleadingScore = globalTracksVector[1].matchScore;
-        scoreGap = leadingScore - subleadingScore;
+        auto leadingChi2 = globalTracksVector[0].matchChi2;
+        auto subleadingChi2 = globalTracksVector[1].matchChi2;
+        chi2Gap = subleadingChi2 - leadingChi2;
       }
 
       for (const auto& candidate : globalTracksVector) {
@@ -2261,14 +2265,14 @@ struct QaMatching {
         double deta = candidate.mchTrackProp.getEta() - candidate.mftTrackProp.getEta();
         int matchType = static_cast<int>(candidate.matchType);
         int ranking = candidate.matchRanking - 1;
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
       }
     }
 
@@ -2305,6 +2309,8 @@ struct QaMatching {
                            MatchingPlotter* plotter,
                            bool /*verbose*/ = false)
   {
+    static std::ofstream matchingOut("matching-qa-2.txt");
+
     int mftTrackMult = collisionInfo.mftTracks.size();
 
     // ====================================
@@ -2406,13 +2412,13 @@ struct QaMatching {
           isTagged = 1;
         }
 
-        float scoreGap = 0;
+        float chi2Gap = 0;
         if (globalTracksVector.size() > 1) {
           // we have at least two candidates, so we can check the score difference
           // between the leading and the sub-leading
-          auto leadingScore = globalTracksVector[0].matchScore;
-          auto subleadingScore = globalTracksVector[1].matchScore;
-          scoreGap = leadingScore - subleadingScore;
+          auto leadingChi2 = globalTracksVector[0].matchChi2;
+          auto subleadingChi2 = globalTracksVector[1].matchChi2;
+          chi2Gap = subleadingChi2 - leadingChi2;
         }
 
         for (const auto& candidate : globalTracksVector) {
@@ -2425,14 +2431,14 @@ struct QaMatching {
           double deta = candidate.mchTrackProp.getEta() - candidate.mftTrackProp.getEta();
           int matchType = static_cast<int>(candidate.matchType);
           int ranking = candidate.matchRanking - 1;
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchScore, scoreGap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
         }
       }
 
@@ -2531,6 +2537,7 @@ struct QaMatching {
         continue;
 
       int trueMatchIndex = getTrueMatchIndex(globalTracksVector, matchablePairs);
+      auto const& mchTrack = muonTracks.rawIteratorAt(mchIndex);
 
       // loop over candidates
       int candidateIndex = 1;
@@ -2550,6 +2557,7 @@ struct QaMatching {
         }
 
         candidateIndex += 1;
+        matchingOut << std::format("Candidate bc={} mch={} chi2={:0.3f} p={:0.3f}", collisionInfo.bc, mchIndex, candidate.matchChi2, mchTrack.p()) << std::endl;
       }
     }
 
@@ -2911,6 +2919,26 @@ struct QaMatching {
                      const MatchingCandidates& matchingCandidates,
                      MatchingCandidates& newMatchingCandidates)
   {
+    static std::ofstream mlout("mlout.cvs");
+    static int trackId = 0;
+
+    int modelId = -1;
+    for (int id = 0; id < MlModelsNum; id++) {
+      if (label == configMlOptions.modelLabels[id]->value) {
+        //modelId = id;
+        break;
+      }
+    }
+
+    if (modelId >= 0 && trackId == 0) {
+      auto inputFeatures = configMlOptions.inputFeatures[modelId]->value;
+      mlout << "   ,";
+      for (int i = 0; i < inputFeatures.size(); i++) {
+        mlout << std::format("{:>16},", inputFeatures[i]);
+      }
+      mlout << std::endl;
+    }
+
     newMatchingCandidates.clear();
     auto mlIter = matchingMlResponses.find(label);
     if (mlIter == matchingMlResponses.end())
@@ -2947,8 +2975,24 @@ struct QaMatching {
         // run the ML model
         std::vector<float> output;
         std::vector<float> inputML = mlResponse.getInputFeatures(muonTrack, mftTrack, mchTrack, mftTrackProp, mchTrackProp, collision);
+
         mlResponse.isSelectedMl(inputML, 0, output);
         float matchScore = output[0];
+
+        if (modelId >= 0 /*&& trackId >= 12909*/) {
+          auto inputFeatures = configMlOptions.inputFeatures[modelId]->value;
+          if (inputFeatures.size() == inputML.size()) {
+            mlout << std::format("{:3},", trackId);
+            for (int i = 0; i < inputFeatures.size(); i++) {
+              mlout << std::format("{:-18.8f},", inputML[i]);
+            }
+            mlout << std::format("{:16.6e}", matchScore) << std::endl;
+          } else {
+            std::cout << std::format("Features size mismatch: {} / {}", inputFeatures.size(), inputML.size()) << std::endl;
+          }
+        }
+        trackId += 1;
+
         float matchChi2Prod = muonTrack.chi2MatchMCHMFT() / MatchingDegreesOfFreedom;
         float matchScoreProd = chi2ToScore(muonTrack.chi2MatchMCHMFT(), MatchingDegreesOfFreedom, MatchingScoreChi2Max);
 
@@ -3409,7 +3453,8 @@ struct QaMatching {
     getTaggedMuons(collisionInfo, collisions, muonTracks, taggedMuons);
 
     int debugCounter{0};
-    fillQaMatchingAodEventForCollision(collisionInfo, collision, collisionInfo.reducedEventId, debugCounter);
+    const auto& bc = bcs.rawIteratorAt(collision.bcId());
+    fillQaMatchingAodEventForCollision(collisionInfo, collision, bc, collisionInfo.reducedEventId, debugCounter);
     fillQaMatchingMchTracksForCollision(collisionInfo, collisions, collision, muonTracks, mftTracks, bcs, taggedMuons, collisionInfo.reducedEventId);
 
     registry.get<TH1>(HIST("tracksMultiplicityMFT"))->Fill(collisionInfo.mftTracks.size());
@@ -3419,7 +3464,7 @@ struct QaMatching {
 
     //-------------------------------
     // Chi2-based matching from production
-    fillQaMatchingAodTablesForCollision(collision, muonTracks, mftTracks, collisionInfo.matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId, collisionInfo.reducedMchTrackIds);
+    fillQaMatchingAodTablesForCollision(collision, bc, muonTracks, mftTracks, collisionInfo.matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId, collisionInfo.reducedMchTrackIds);
     if constexpr (isMC) {
       fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMuons, collisionInfo.matchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, cfgMatchingChi2ScoreMftMchLow, fChi2MatchingPlotter.get(), false);
     } else {
@@ -3458,7 +3503,7 @@ struct QaMatching {
       }
     }
     if constexpr (isMC) {
-      fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMuons, taggedMatchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, cfgMatchingChi2ScoreMftMchLow, fTaggedMuonsMatchingPlotter.get());
+      //fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMuons, taggedMatchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, cfgMatchingChi2ScoreMftMchLow, fTaggedMuonsMatchingPlotter.get());
     } else {
       fillMatchingPlots(collision, muonTracks, taggedMuons, taggedMatchingCandidates, fTaggedMuonsMatchingPlotter.get());
     }
@@ -3477,9 +3522,9 @@ struct QaMatching {
       double matchingScoreCut = matchingScoreCuts.at(label);
 
       matchingMethodCounter += 1;
-      fillQaMatchingAodTablesForCollision(collision, muonTracks, mftTracks, matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId, collisionInfo.reducedMchTrackIds);
+      fillQaMatchingAodTablesForCollision(collision, bc, muonTracks, mftTracks, matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId, collisionInfo.reducedMchTrackIds);
       if constexpr (isMC) {
-        fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMuons, matchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, matchingScoreCut, plotter, false);
+        //fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMuons, matchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, matchingScoreCut, plotter, false);
       } else {
         fillMatchingPlots(collision, muonTracks, taggedMuons, matchingCandidates, plotter);
       }
@@ -3499,9 +3544,9 @@ struct QaMatching {
       double matchingScoreCut = matchingScoreCuts.at(label);
 
       matchingMethodCounter += 1;
-      fillQaMatchingAodTablesForCollision(collision, muonTracks, mftTracks, matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId, collisionInfo.reducedMchTrackIds);
+      fillQaMatchingAodTablesForCollision(collision, bc, muonTracks, mftTracks, matchingCandidates, matchingMethodCounter, collisionInfo.reducedEventId, collisionInfo.reducedMchTrackIds);
       if constexpr (isMC) {
-        fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMuons, matchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, matchingScoreCut, plotter);
+        //fillMatchingPlotsMc(collision, collisionInfo, muonTracks, mftTracks, taggedMuons, matchingCandidates, collisionInfo.matchingCandidates, collisionInfo.matchablePairs, matchingScoreCut, plotter);
       } else {
         fillMatchingPlots(collision, muonTracks, taggedMuons, matchingCandidates, plotter);
       }
@@ -3512,8 +3557,9 @@ struct QaMatching {
     fillDimuonPlotsMc(collisionInfo, collisions, muonTracks, mftTracks);
   }
 
-  template <class TCOLLISION, class TMUON, class TMFT>
+  template <class TCOLLISION, class TBC, class TMUON, class TMFT>
   void fillQaMatchingAodTablesForCollision(TCOLLISION const& collision,
+                                           TBC bc,
                                            TMUON const& muonTracks,
                                            TMFT const& mftTracks,
                                            const MatchingCandidates& matchingCandidates,
@@ -3521,15 +3567,17 @@ struct QaMatching {
                                            int32_t reducedEventId,
                                            std::map<int64_t, int64_t> reducedMchTrackIds)
   {
+    static std::ofstream matchingOut("matching-qa.txt");
+
     for (const auto& [mchIndex, candidates] : matchingCandidates) {
       if (candidates.empty()) {
         continue;
       }
 
       const auto& mchTrack = muonTracks.rawIteratorAt(mchIndex);
-      if (!isGoodGlobalMuon(mchTrack, collision)) {
-        continue;
-      }
+      //if (!isGoodGlobalMuon(mchTrack, collision)) {
+      //  continue;
+      //}
 
       auto reducedMchTrackIdIt = reducedMchTrackIds.find(mchIndex);
       if (reducedMchTrackIdIt == reducedMchTrackIds.end()) {
@@ -3542,6 +3590,11 @@ struct QaMatching {
         const auto& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
         // propagate global forward track to vertex using momentum rescaling method
         auto candidateTrackAtVertex = propagateToVertexMft(mftTrack, mchTrack, collision);
+
+        if (matchLabel == 0) {
+          matchingOut << std::format("Candidate bc={} mch={} chi2={:0.3f} p={:0.3f}", bc.globalBC(), reducedMchTrackId, candidate.matchChi2, mchTrack.p()) << std::endl;
+        }
+
         qaMatchingCandidates(
           reducedEventId,
           reducedMchTrackId,
@@ -3564,14 +3617,18 @@ struct QaMatching {
     }
   }
 
-  template <class TCOLLISION>
+  template <class TCOLLISION, class TBC>
   void fillQaMatchingAodEventForCollision(const CollisionInfo& collisionInfo,
                                           TCOLLISION const& collision,
+                                          TBC bc,
                                           int32_t reducedEventId,
                                           int& debugCounter)
   {
+    //matchingOut << std::format("Collision {}", collision.globalIndex()) << std::endl;
+
     int32_t mftMultiplicity = static_cast<int32_t>(collisionInfo.mftTracks.size());
     qaMatchingEvents(
+      static_cast<int64_t>(bc.globalBC()),
       mftMultiplicity,
       static_cast<float>(collision.posX()),
       static_cast<float>(collision.posY()),
@@ -3614,6 +3671,9 @@ struct QaMatching {
       if (std::find(taggedMuons.begin(), taggedMuons.end(), mchIndex) != taggedMuons.end()) {
         isTagged = true;
       }
+
+      //matchingOut << std::format("  Muon {} with p={:0.3f}", mchIndex, mchTrack.p()) << std::endl;
+
       qaMatchingMCHTrack(
         reducedEventId,
         static_cast<int8_t>(mchTrack.trackType()),

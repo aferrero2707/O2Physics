@@ -587,6 +587,14 @@ struct mftMchMatcher {
                  TMFTS const& mftTracks,
                  TCOVS const& mftCovs)
   {
+    static std::ofstream mlout("mlout-training.txt");
+    static int trackId = 0;
+
+    if (trackId == 0) {
+      mlout << "   " << std::format("{:>16}{:>16}{:>16}", "XMCH", "YMCH", "ZMCH");
+      mlout << std::endl;
+    }
+
     registry.get<TH1>(HIST("acceptedEvents"))->Fill(0);
     // reject a randomly selected fraction of events
     if (fSamplingFraction < 1.0) {
@@ -673,6 +681,9 @@ struct mftMchMatcher {
         mcMaskMft = mfttrack.mcMask();
         ncMaskGlob = muon.mcMask();
       }
+
+      mlout << std::format("{:3}{:+16.6f}{:+16.6f}{:+16.6f}", trackId, muonprop.getX(), muonprop.getY(), muonprop.getZ()) << std::endl;
+      trackId += 1;
 
       registry.get<TH1>(HIST("matchType"))->Fill(static_cast<int>(matchType));
 

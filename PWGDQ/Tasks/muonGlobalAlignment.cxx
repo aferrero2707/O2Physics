@@ -97,6 +97,7 @@ using namespace o2::aod::rctsel;
 using MyCollisions = aod::Collisions;
 using MyBCs = soa::Join<aod::BCs, aod::Timestamps, aod::BcSels>;
 using MyEvents = soa::Join<aod::Collisions, aod::EvSels>;
+using MyMuons = aod::FwdTracks;
 using MyMuonsWithCov = soa::Join<aod::FwdTracks, aod::FwdTracksCov>;
 // using MyMuonsWithCov = aod::FwdTracks;
 using MyMFTs = aod::MFTTracks;
@@ -271,9 +272,35 @@ struct muonGlobalAlignment {
     std::map<uint64_t, std::vector<uint64_t>> globalMuonTracks;
   };
 
-  void InitCollisions(MyEvents const& collisions,
-                      MyBCs const& bcs,
-                      MyMuonsWithCov const& muonTracks,
+  template <class COLL, class BC, class TMUON>
+  void InitCollisionsRun2(COLL const& collisions,
+                          BC const& bcs,
+                          TMUON const& muonTracks,
+                          std::map<uint64_t, CollisionInfo>& collisionInfos)
+  {
+    // fill collision information for global muon tracks (MFT-MCH-MID matches)
+    for (auto muonTrack : muonTracks) {
+      if (!muonTrack.has_collision())
+        continue;
+
+      auto collision = collisions.rawIteratorAt(muonTrack.collisionId());
+      uint64_t collisionIndex = collision.globalIndex();
+
+      auto bc = bcs.rawIteratorAt(collision.bcId());
+
+      auto& collisionInfo = collisionInfos[collisionIndex];
+      collisionInfo.bc = bc.globalBC();
+      collisionInfo.zVertex = collision.posZ();
+
+      uint64_t mchTrackIndex = muonTrack.globalIndex();
+      collisionInfo.mchTracks.push_back(mchTrackIndex);
+    }
+  }
+
+  template <class COLL, class BC, class TMUON>
+  void InitCollisions(COLL const& collisions,
+                      BC const& bcs,
+                      TMUON const& muonTracks,
                       std::map<uint64_t, CollisionInfo>& collisionInfos)
   {
     // fill collision information for global muon tracks (MFT-MCH-MID matches)
@@ -294,6 +321,8 @@ struct muonGlobalAlignment {
       collisionInfo.bc = bc.globalBC();
       collisionInfo.zVertex = collision.posZ();
 
+      std::cout << std::format("Muon track type: {}", static_cast<int>(muonTrack.trackType())) << std::endl;
+
       if (static_cast<int>(muonTrack.trackType()) > 2) {
         // standalone MCH or MCH-MID tracks
         uint64_t mchTrackIndex = muonTrack.globalIndex();
@@ -301,7 +330,7 @@ struct muonGlobalAlignment {
       } else {
         // global muon tracks (MFT-MCH or MFT-MCH-MID)
         uint64_t muonTrackIndex = muonTrack.globalIndex();
-        auto const& mchTrack = muonTrack.template matchMCHTrack_as<MyMuonsWithCov>();
+        auto const& mchTrack = muonTrack.template matchMCHTrack_as<TMUON>();
         uint64_t mchTrackIndex = mchTrack.globalIndex();
 
         // check if a vector of global muon candidates is already available for the current MCH index
@@ -419,6 +448,36 @@ struct muonGlobalAlignment {
         int iDEN = GetDetElemId(i);
         transformNew[iDEN] = transformation(iDEN);
       }
+    }
+  }
+
+  template <typename BC>
+  void initCCDBRun2(BC const& bc)
+  {
+    if (mRunNumber == bc.runNumber())
+      return;
+
+    mRunNumber = bc.runNumber();
+    //ccdbManager->setCreatedNotAfter(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    // auto grpmag = ccdbApi.retrieveFromTFileAny<o2::parameters::GRPMagField>(grpmagPath, metadata, ts);
+    auto grpmag = ccdbManager->getForTimeStamp<o2::parameters::GRPObject>(configCCDB.grpmagPath, bc.timestamp());
+    if (grpmag != nullptr) {
+      base::Propagator::initFieldFromGRP(grpmag);
+      TrackExtrap::setField();
+      TrackExtrap::useExtrapV2();
+      fieldB = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField()); // for MFT
+      double centerMFT[3] = {0, 0, -61.4};                                                         // or use middle point between Vtx and MFT?
+      mBzAtMftCenter = fieldB->getBz(centerMFT);
+
+      /*std::ofstream magFieldMap("mag-field.txt");
+      for (float z = 500; z <= 1500; z += 1) {
+        Double_t fieldPos[3] = {0, 0, -1.0 * z};
+        Double_t bxyz[3];
+        fieldB->Field(fieldPos, bxyz);
+        magFieldMap << std::format("{:0.3f} {:0.3f} {:0.3f} {:0.3f}", z, bxyz[0], bxyz[1], bxyz[2]) << std::endl;
+      }*/
+    } else {
+      LOGF(fatal, "GRP object is not available in CCDB at timestamp=%llu", bc.timestamp());
     }
   }
 
@@ -584,6 +643,9 @@ struct muonGlobalAlignment {
         registry.get<TH1>(HIST("residuals/de_alignment_corrections_y"))->SetBinContent(deIndex + 1, corr.y);
         registry.get<TH1>(HIST("residuals/de_alignment_corrections_y"))->SetBinError(deIndex + 1, 0.1);
       }
+
+      registry.add("residuals/cluster_z_vs_de", "Cluster z vs. DE",
+                   {HistType::kTH2F, {{5000, 500, 1000, "cluster z (cm)"}, {16, 0, static_cast<double>(16), "DE"}}});
 
       if (fEnableMftMchResidualsExtraPlots) {
         registry.add("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_vz", std::format("DCA(x) vs. vz, quadrant, chargeSign").c_str(), {HistType::kTHnSparseF, {dcazAxis, {4, 0, 4, "quadrant"}, {2, 0, 2, "sign"}, dcaxMCHAxis}});
@@ -1488,7 +1550,7 @@ struct muonGlobalAlignment {
     return MCHtoFwd(mftTrackProp);
   }
 
-  void FillDCAPlots(MyEvents const& collisions,
+  void FillMftPlots(MyEvents const& collisions,
                     MyBCs const& bcs,
                     MyMuonsWithCov const& muonTracks,
                     MyMFTs const& mftTracks,
@@ -1736,11 +1798,11 @@ struct muonGlobalAlignment {
     return !removable;
   }
 
-  void FillResidualsPlots(MyEvents const& collisions,
-                          MyBCs const& bcs,
-                          MyMuonsWithCov const& muonTracks,
-                          aod::FwdTrkCls const& clusters,
-                          const std::map<uint64_t, CollisionInfo>& collisionInfos)
+  void FillMchPlots(MyEvents const& collisions,
+                    MyBCs const& bcs,
+                    MyMuonsWithCov const& muonTracks,
+                    aod::FwdTrkCls const& clusters,
+                    const std::map<uint64_t, CollisionInfo>& collisionInfos)
   {
     if (!fEnableMftMchResidualsAnalysis && !fEnableMchResidualsAnalysis && !fEnableMftMchMatchingAnalysis) {
       return;
@@ -1810,6 +1872,10 @@ struct muonGlobalAlignment {
             master.SetXYZ(cluster.x(), cluster.y(), cluster.z());
             masterWithCorr.SetXYZ(cluster.x(), cluster.y(), cluster.z());
 
+            if (deId == 100) {
+              std::cout << std::format("DE100 z (before realignment): {:0.3f}", master.z()) << std::endl;
+            }
+
             // apply realignment to MCH cluster
             if (configRealign.fEnableMCHRealign) {
               // Transformation from reference geometry frame to new geometry frame
@@ -1827,6 +1893,15 @@ struct muonGlobalAlignment {
                 masterWithCorr.SetY(masterWithCorr.y() + corrections.y);
                 masterWithCorr.SetZ(masterWithCorr.z() + corrections.z);
               }
+            }
+
+            if (deId == 100) {
+              std::cout << std::format("DE100 z (after realignment):  {:0.3f}", master.z()) << std::endl;
+            }
+
+            if (deId < 500) {
+            std::cout << std::format("DE ID {} ({}) cluster z: {}", deId, deIndex, -master.z()) << std::endl;
+            registry.get<TH2>(HIST("residuals/cluster_z_vs_de"))->Fill(-master.z(), deIndex);
             }
 
             // MFT-MCH residuals (MCH cluster is realigned if enabled)
@@ -2005,6 +2080,53 @@ struct muonGlobalAlignment {
     }
   }
 
+
+  template <class COLL, class BC, class TMUON>
+  void FillMchPlotsRun2(COLL const& collisions,
+                        BC const& bcs,
+                        TMUON const& muonTracks,
+                        const std::map<uint64_t, CollisionInfo>& collisionInfos)
+  {
+    if (!fEnableMftMchResidualsAnalysis && !fEnableMchResidualsAnalysis && !fEnableMftMchMatchingAnalysis) {
+      return;
+    }
+
+    // loop over collisions
+    for (auto& [collisionIndex, collisionInfo] : collisionInfos) {
+      auto const& collision = collisions.rawIteratorAt(collisionIndex);
+      const auto& bc = bcs.rawIteratorAt(collision.bcId());
+
+      // loop over global muon tracks
+      for (auto& mchIndex : collisionInfo.mchTracks) {
+        auto const& mchTrack = muonTracks.rawIteratorAt(mchIndex);
+        int quadrant = GetQuadrant(mchTrack);
+        int posNeg = (mchTrack.sign() >= 0) ? 0 : 1;
+
+        bool isGoodMuon = true; //IsGoodMuon(mchTrack, collision, fTrackChi2MchUp, fMftMchResidualsPLow, fMftMchResidualsPtLow, {fEtaMftLow, fEtaMftUp}, {fRabsLow, fRabsUp}, fSigmaPdcaUp);
+        if (!isGoodMuon)
+          continue;
+
+        auto mchTrackAtDCA = PropagateMCH(FwdToTrackPar(mchTrack), collision.posZ());
+        auto dcax = mchTrackAtDCA.getX() - collision.posX();
+        auto dcay = mchTrackAtDCA.getY() - collision.posY();
+
+        std::cout << std::format("Track: type={} z={:0.3f} vz={:0.3f} p={:+0.5f}", mchTrack.trackType(), mchTrack.z(), collision.posZ(), mchTrack.p()) << std::endl;
+        std::cout << std::format("DCA: x={:+0.5f} y={:+0.5f}", dcax, dcay) << std::endl;
+        std::cout << std::format("MCH: x={:+0.5f} y={:+0.5f}", mchTrackAtDCA.getX(), mchTrackAtDCA.getY()) << std::endl;
+        std::cout << std::format("VTX: x={:+0.5f} y={:+0.5f}", collision.posX(), collision.posY()) << std::endl;
+
+        registry.get<TH2>(HIST("DCA/MCH/DCA_y_vs_x"))->Fill(dcax, dcay);
+        registry.get<THnSparse>(HIST("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_mom"))->Fill(mchTrack.p(), quadrant, posNeg, dcax);
+        registry.get<THnSparse>(HIST("DCA/MCH/DCA_y_vs_sign_vs_quadrant_vs_mom"))->Fill(mchTrack.p(), quadrant, posNeg, dcay);
+
+        if (fEnableMftMchResidualsExtraPlots) {
+          registry.get<THnSparse>(HIST("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_vz"))->Fill(collision.posZ(), quadrant, posNeg, dcax);
+          registry.get<THnSparse>(HIST("DCA/MCH/DCA_y_vs_sign_vs_quadrant_vs_vz"))->Fill(collision.posZ(), quadrant, posNeg, dcay);
+        }
+      }
+    }
+  }
+
   void processQA(MyEvents const& collisions,
                  MyBCs const& bcs,
                  MyMuonsWithCov const& muonTracks,
@@ -2023,12 +2145,32 @@ struct muonGlobalAlignment {
     std::map<uint64_t, CollisionInfo> collisionInfos;
     InitCollisions(collisions, bcs, muonTracks, mftTracks, collisionInfos);
 
-    FillDCAPlots(collisions, bcs, muonTracks, mftTracks, collisionInfos);
+    FillMftPlots(collisions, bcs, muonTracks, mftTracks, collisionInfos);
 
-    FillResidualsPlots(collisions, bcs, muonTracks, clusters, collisionInfos);
+    FillMchPlots(collisions, bcs, muonTracks, clusters, collisionInfos);
   }
 
-  PROCESS_SWITCH(muonGlobalAlignment, processQA, "process qa", true);
+  PROCESS_SWITCH(muonGlobalAlignment, processQA, "processQA", true);
+
+  void processQARun2(MyEvents const& collisions,
+                     MyBCs const& bcs,
+                     MyMuons const& muonTracks)
+  {
+    auto bc = bcs.begin();
+    if (mRunNumber != bc.runNumber()) {
+      initCCDBRun2(bc);
+      LOGF(info, "Set field for muons");
+      VarManager::SetupMuonMagField();
+      mRunNumber = bc.runNumber();
+    }
+
+    std::map<uint64_t, CollisionInfo> collisionInfos;
+    InitCollisionsRun2(collisions, bcs, muonTracks, collisionInfos);
+
+    FillMchPlotsRun2(collisions, bcs, muonTracks, collisionInfos);
+  }
+
+  PROCESS_SWITCH(muonGlobalAlignment, processQARun2, "processQARun2", false);
 };
 
 WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
