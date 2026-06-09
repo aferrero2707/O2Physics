@@ -149,6 +149,11 @@ o2physics_add_dpl_workflow(mft-mch-matcher
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore
                     COMPONENT_NAME Analysis)
 
+o2physics_add_dpl_workflow(global-muon-matcher
+                    SOURCES global-muon-matcher.cxx
+                    PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore O2::DetectorsBase O2::DetectorsCommonDataFormats O2::MathUtils O2::MCHTracking O2::DataFormatsMCH O2::GlobalTracking O2::MCHBase O2::MCHGeometryTransformer O2::CommonUtils
+                    COMPONENT_NAME Analysis)
+
 o2physics_add_dpl_workflow(muon-global-alignment
                     SOURCES muonGlobalAlignment.cxx
                     PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore O2Physics::PWGDQCore O2::MCHGeometryTransformer
