@@ -623,7 +623,7 @@ struct mftMchMatcher {
       mftCovIndexes[mftTrackCov.matchMFTTrackId()] = mftTrackCov.globalIndex();
     }
 
-    //fwdMatchMLCandidates.reserve(muonTracks.size());
+    // fwdMatchMLCandidates.reserve(muonTracks.size());
 
     for (auto muon : muonTracks) {
       // only consider global MFT-MCH-MID matches
