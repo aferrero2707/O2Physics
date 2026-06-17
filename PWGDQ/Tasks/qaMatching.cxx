@@ -2111,7 +2111,15 @@ struct QaMatching {
 
           int64_t muonTrackIndex = muonTrack.globalIndex();
           double matchChi2 = muonTrack.chi2MatchMCHMFT(); // / MatchingDegreesOfFreedom;
-          double matchScore = chi2ToScore(muonTrack.chi2MatchMCHMFT(), MatchingDegreesOfFreedom, MatchingScoreChi2Max);
+          double matchScore = muonTrack.matchScoreMCHMFT();
+          if (matchScore >= 0 && matchChi2 < 0) {
+            // match score from ML-based matching, we compute a chi2-like value from the score
+            double matchScoreInv = (matchScore > 0) ? 1.0 / matchScore : std::numeric_limits<double>::max;
+            matchChi2 = std::log10(matchScoreInv) * 10.;
+          } else if (matchScore < 0 && matchChi2 >= 0) {
+            // match schi2 from chi2-based matching, we compute the score value from the chi2
+            matchScore = chi2ToScore(muonTrack.chi2MatchMCHMFT(), MatchingDegreesOfFreedom, MatchingScoreChi2Max);
+          }
           auto const& mchTrack = muonTrack.template matchMCHTrack_as<TMUON>();
           int64_t mchTrackIndex = mchTrack.globalIndex();
           auto const& mftTrack = muonTrack.template matchMFTTrack_as<TMFT>();
