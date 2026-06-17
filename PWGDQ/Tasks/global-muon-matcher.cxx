@@ -168,14 +168,14 @@ struct GlobalMuonMatching {
   struct : ConfigurableGroup {
     Configurable<bool> cfgEnableMftAlignmentCorrections{"cfgEnableMFTAlignmentCorrections", true, "Enable alignment corrections for the MFT tracks"};
     // slope corrections
-    Configurable<float> cfgMFTAlignmentCorrXSlopeTop{"cfgMFTAlignmentCorrXSlopeTop", (-0.0006696 - 0.0005621) / 2.f, "MFT X slope correction - top half"};
-    Configurable<float> cfgMFTAlignmentCorrXSlopeBottom{"cfgMFTAlignmentCorrXSlopeBottom", (0.00105 + 0.001007) / 2.f, "MFT X slope correction - bottom half"};
-    Configurable<float> cfgMFTAlignmentCorrYSlopeTop{"cfgMFTAlignmentCorrYSlopeTop", (-0.002299 - 0.002442) / 2.f, "MFT Y slope correction - top half"};
-    Configurable<float> cfgMFTAlignmentCorrYSlopeBottom{"cfgMFTAlignmentCorrYSlopeBottom", (-0.0005339 - 0.0006921) / 2.f, "MFT Y slope correction - bottom half"};
-    //Configurable<float> cfgMFTAlignmentCorrXSlopeTop{"cfgMFTAlignmentCorrXSlopeTop", 0.f, "MFT X slope correction - top half"};
-    //Configurable<float> cfgMFTAlignmentCorrXSlopeBottom{"cfgMFTAlignmentCorrXSlopeBottom", 0.f, "MFT X slope correction - bottom half"};
-    //Configurable<float> cfgMFTAlignmentCorrYSlopeTop{"cfgMFTAlignmentCorrYSlopeTop", 0.f, "MFT Y slope correction - top half"};
-    //Configurable<float> cfgMFTAlignmentCorrYSlopeBottom{"cfgMFTAlignmentCorrYSlopeBottom", 0.f, "MFT Y slope correction - bottom half"};
+    //Configurable<float> cfgMFTAlignmentCorrXSlopeTop{"cfgMFTAlignmentCorrXSlopeTop", (-0.0006696 - 0.0005621) / 2.f, "MFT X slope correction - top half"};
+    //Configurable<float> cfgMFTAlignmentCorrXSlopeBottom{"cfgMFTAlignmentCorrXSlopeBottom", (0.00105 + 0.001007) / 2.f, "MFT X slope correction - bottom half"};
+    //Configurable<float> cfgMFTAlignmentCorrYSlopeTop{"cfgMFTAlignmentCorrYSlopeTop", (-0.002299 - 0.002442) / 2.f, "MFT Y slope correction - top half"};
+    //Configurable<float> cfgMFTAlignmentCorrYSlopeBottom{"cfgMFTAlignmentCorrYSlopeBottom", (-0.0005339 - 0.0006921) / 2.f, "MFT Y slope correction - bottom half"};
+    Configurable<float> cfgMFTAlignmentCorrXSlopeTop{"cfgMFTAlignmentCorrXSlopeTop", 0.f, "MFT X slope correction - top half"};
+    Configurable<float> cfgMFTAlignmentCorrXSlopeBottom{"cfgMFTAlignmentCorrXSlopeBottom", 0.f, "MFT X slope correction - bottom half"};
+    Configurable<float> cfgMFTAlignmentCorrYSlopeTop{"cfgMFTAlignmentCorrYSlopeTop", 0.f, "MFT Y slope correction - top half"};
+    Configurable<float> cfgMFTAlignmentCorrYSlopeBottom{"cfgMFTAlignmentCorrYSlopeBottom", 0.f, "MFT Y slope correction - bottom half"};
     // offset corrections
     Configurable<float> cfgMFTAlignmentCorrXOffsetTop{"cfgMFTAlignmentCorrXOffsetTop", 0.f, "MFT X offset correction - top half"};
     Configurable<float> cfgMFTAlignmentCorrXOffsetBottom{"cfgMFTAlignmentCorrXOffsetBottom", 0.f, "MFT X offset correction - bottom half"};
@@ -1363,18 +1363,12 @@ struct GlobalMuonMatching {
                      const MatchingCandidates& matchingCandidates,
                      MatchingCandidates& newMatchingCandidates)
   {
-    static std::ofstream mlout("mlout-rematching.cvs");
-    static int trackId = 0;
-
     newMatchingCandidates.clear();
-    std::cout << "[runMlMatching] called" << std::endl;
     for (const auto& [mchIndex, candidatesVector] : matchingCandidates) {
       auto const& mchTrack = muonTracks.rawIteratorAt(mchIndex);
       if (!mchTrack.has_collision()) {
         continue;
       }
-
-      std::cout << std::format("[runMlMatching] processing MCH track {}", mchIndex) << std::endl;
 
       auto collision = collisions.rawIteratorAt(mchTrack.collisionId());
 
@@ -1385,8 +1379,6 @@ struct GlobalMuonMatching {
       }
 
       for (const auto& candidate : candidatesVector) {
-        std::cout << std::format("[runMlMatching] processing candidate {}/{}/{}", mchIndex, candidate.muonTrackId, candidate.mftTrackId) << std::endl;
-
         auto const& muonTrack = (candidate.muonTrackId >= 0) ? muonTracks.rawIteratorAt(candidate.muonTrackId) : mchTrack;
         auto const& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
         auto mftTrackParIt = mMftTrackPars.find(candidate.mftTrackId);
@@ -1406,16 +1398,6 @@ struct GlobalMuonMatching {
         std::vector<float> inputML = mlResponse.getInputFeatures(muonTrack, mftTrack, mchTrack, mftTrackProp, mchTrackProp, collision);
         mlResponse.isSelectedMl(inputML, 0, output);
         float matchScore = output[0];
-
-        if (trackId < 100) {
-          auto inputFeatures = configMlOptions.cfgMlInputFeatures.value;
-          mlout << std::format("{:3}/{}/{},", trackId, mchIndex, mftTrack.globalIndex()) << std::endl;
-          for (size_t i = 0; i < inputML.size(); i++) {
-            mlout << std::format("    {}={:-18.8f},", inputFeatures[i], inputML[i]) << std::endl;
-          }
-          mlout << std::format("  score={:16.6e}", matchScore) << std::endl;
-        }
-        trackId += 1;
 
         newMatchingCandidates[mchIndex].emplace_back(MatchingCandidate{
           candidate.muonTrackId,
@@ -1476,7 +1458,6 @@ struct GlobalMuonMatching {
   void fillMatchingCandidates(const MatchingCandidates& matchingCandidates,
                               const std::vector<int64_t>& taggedMuons)
   {
-    //std::cout << std::format("[fillMatchingCandidatesForCollision] matchingCandidates.size()={}", matchingCandidates.size()) << std::endl;
     for (const auto& [mchIndex, candidates] : matchingCandidates) {
       if (candidates.empty()) {
         continue;
@@ -1505,7 +1486,6 @@ struct GlobalMuonMatching {
         storedCandidates.push_back(candidate);
         nStored += 1;
       }
-      //std::cout << std::format("[fillMatchingCandidatesForCollision] storedCandidates.size()={} configMatching.cfgMaxCandidatesPerMchTrack.value={}", storedCandidates.size(), configMatching.cfgMaxCandidatesPerMchTrack.value) << std::endl;
 
       if (!storedCandidates.empty()) {
         mMchTrackMatchingCandidates[mchIndex] = std::move(storedCandidates);
@@ -1539,7 +1519,6 @@ struct GlobalMuonMatching {
       const int trackType = static_cast<int>(track.trackType());
       if (trackType > GlobalTrackTypeMax) {
         mFwdTrackToGmmCandTrkIndex[track.globalIndex()] = nextGmmCandTrkIndex;
-        std::cout << std::format("Stored candidates for track {}: {}", track.globalIndex(), countStoredCandidatesForMchTrack(track.globalIndex())) << std::endl;
         nextGmmCandTrkIndex += 1 + countStoredCandidatesForMchTrack(track.globalIndex());
       } else if (configMatching.cfgIncludeGlobalMuonsInFwdTracks.value && trackType <= GlobalTrackTypeMax) {
         nextGmmCandTrkIndex += 1;
@@ -1555,24 +1534,13 @@ struct GlobalMuonMatching {
         const int32_t gmmMchTrackId = mFwdTrackToGmmCandTrkIndex.at(mchTrackIndex);
 
         const auto candidateIterator = mMchTrackMatchingCandidates.find(mchTrackIndex);
-        if (candidateIterator != mMchTrackMatchingCandidates.end()) {
-          std::cout << std::format("Filling Muon table for track {}/{} with {} candidates", mchTrackIndex, gmmMchTrackId, candidateIterator->second.size()) << std::endl;
-        } else {
-          std::cout << std::format("Filling Muon table for track {}/{} with 0 candidates", mchTrackIndex, gmmMchTrackId) << std::endl;
-        }
-
         auto mchTrackParIt = mMchTrackPars.find(mchTrackIndex);
         if (mchTrackParIt == mMchTrackPars.end()) {
           // fill muon tracks table with original parameters
-          std::cout << std::format("TOTO Parameters for track {} not found, using track instead -> has_collision()={}", mchTrackIndex, track.has_collision()) << std::endl;
-          std::cout << "Converting track to TrackParCovFwd" << std::endl;
           const TrackParExt trackPar{fwdtrackutils::getTrackParCovFwd(track, track)};
-          std::cout << "Filling muon tracks table with original parameters" << std::endl;
           fillBaseGmmCandFwdTrack(track, trackPar, gmmMchTrackId, -1.f, -1.f);
-          std::cout << "DONE - Filling muon tracks table with original parameters" << std::endl;
         } else {
           // fill muon tracks table with realignment parameters
-          std::cout << "Filling muon tracks table with realignment parameters" << std::endl;
           fillBaseGmmCandFwdTrack(track, mchTrackParIt->second, gmmMchTrackId, -1.f, -1.f);
         }
 
@@ -1581,10 +1549,7 @@ struct GlobalMuonMatching {
             auto mftTrackParIt = mMftTrackPars.find(candidate.mftTrackId);
             if (mftTrackParIt != mMftTrackPars.end()) {
               const auto& mftTrack = mftTracks.rawIteratorAt(candidate.mftTrackId);
-              std::cout << std::format("Filling Muon table for candidate {}/{}", gmmMchTrackId, mftTrack.globalIndex()) << std::endl;
               fillCandidateFwdTrack(track, mchTrackParIt->second, gmmMchTrackId, mftTrack, mftTrackParIt->second, candidate);
-            } else {
-              std::cout << std::format("Track parameters not found for candidate {}/{}", gmmMchTrackId, candidate.mftTrackId) << std::endl;
             }
           }
         }
