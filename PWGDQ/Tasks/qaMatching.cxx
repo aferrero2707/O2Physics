@@ -20,9 +20,9 @@
 #include "Common/DataModel/Centrality.h"
 #include "Common/DataModel/CollisionAssociationTables.h"
 #include "Common/DataModel/EventSelection.h"
+#include "Common/DataModel/FwdTrackReAlignTables.h"
 #include "Common/DataModel/Multiplicity.h"
 #include "Common/DataModel/TrackSelectionTables.h"
-#include "Common/DataModel/FwdTrackReAlignTables.h"
 #include "Tools/ML/MlResponse.h"
 
 #include <CCDB/BasicCCDBManager.h>
