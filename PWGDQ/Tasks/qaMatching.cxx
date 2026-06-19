@@ -75,6 +75,7 @@
 #include <cstdint>
 #include <format>
 #include <functional>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
