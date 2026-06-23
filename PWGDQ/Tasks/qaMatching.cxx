@@ -477,7 +477,6 @@ struct QaMatching {
     std::vector<int64_t> compatMftTracks;
   };
 
-
   struct CollisionInfo {
     int64_t index{0};
     // internal index of this collision in the derived table
