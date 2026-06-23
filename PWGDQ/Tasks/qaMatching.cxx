@@ -1926,11 +1926,11 @@ struct QaMatching {
                     std::vector<GlobalMuonPair>& globalMuonPairs)
   {
     // outer loop over muon tracks
-    for (const auto& [mchIndex1, mchTrackInfo1] : collisionInfo.mchTracks) {
-      (void)mchTrackInfo1;
+    for (const auto& mchTrack1 : collisionInfo.mchTracks) {
+      auto mchIndex1 = mchTrack1.first;
       // inner loop over muon tracks
-      for (const auto& [mchIndex2, mchTrackInfo2] : collisionInfo.mchTracks) {
-        (void)mchTrackInfo2;
+      for (const auto& mchTrack2 : collisionInfo.mchTracks) {
+        auto mchIndex2 = mchTrack2.first;
         // avoid double-counting of muon pairs
         if (mchIndex2 <= mchIndex1)
           continue;
@@ -3770,16 +3770,14 @@ struct QaMatching {
                                            int32_t reducedEventId)
   {
     std::vector<int64_t> mchIds;
-    for (const auto& [mchIndex, mchTrackInfo] : collisionInfo.mchTracks) {
-      (void)mchTrackInfo;
-      if (std::find(mchIds.begin(), mchIds.end(), mchIndex) == mchIds.end()) {
-        mchIds.emplace_back(mchIndex);
+    for (const auto& mchTrack : collisionInfo.mchTracks) {
+      if (std::find(mchIds.begin(), mchIds.end(), mchTrack.first) == mchIds.end()) {
+        mchIds.emplace_back(mchTrack.first);
       }
     }
-    for (const auto& [mchIndex, candidates] : collisionInfo.matchingCandidates) {
-      (void)candidates;
-      if (std::find(mchIds.begin(), mchIds.end(), mchIndex) == mchIds.end()) {
-        mchIds.emplace_back(mchIndex);
+    for (const auto& candidate : collisionInfo.matchingCandidates) {
+      if (std::find(mchIds.begin(), mchIds.end(), candidate.first) == mchIds.end()) {
+        mchIds.emplace_back(candidate.first);
       }
     }
 
