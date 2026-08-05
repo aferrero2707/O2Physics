@@ -759,7 +759,7 @@ struct GlobalMuonMatching {
     mRunNumber = 0;
 
     // configure magnetic field position bias
-    o2::conf::ConfigurableParam::setValue("FieldOriginBias.z",std::to_string(cfgFieldOriginBiasZ.value));
+    o2::conf::ConfigurableParam::setValue("FieldOriginBias.z", std::to_string(cfgFieldOriginBiasZ.value));
 
     // Configuration for track fitter
     const auto& trackerParam = mch::TrackerParam::Instance();
