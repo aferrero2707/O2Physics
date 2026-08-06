@@ -35,6 +35,7 @@
 #include <Framework/HistogramSpec.h>
 #include <Framework/InitContext.h>
 #include <Framework/runDataProcessing.h>
+#include <GPU/GPUROOTCartesianFwd.h>
 #include <GlobalTracking/MatchGlobalFwd.h>
 #include <MCHBase/TrackerParam.h>
 #include <MCHGeometryTransformer/Transformations.h>
@@ -58,7 +59,6 @@
 #include <THnSparse.h>
 #include <TMath.h>
 
-#include <GPU/GPUROOTCartesianFwd.h>
 #include <rapidjson/document.h>
 #include <rapidjson/error/error.h>
 
