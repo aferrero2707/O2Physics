@@ -658,6 +658,10 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       AxisSpec muNegQuadrantAxis = {4, 0, 4, "#mu^{-} quadrant"};
       AxisSpec angleAxis = {100, 0, 0.5, "#mu^{+}#mu^{-} angle (rad)"};
       AxisSpec angleDiffAxis = {500, -0.05, 0.05, "#mu^{+}#mu^{-} angle difference (rad)"};
+      AxisSpec dcaxAxis = {400, -10.0, 10.0, "#mu^{+}#mu^{-} DCA_{x} (cm)"};
+      AxisSpec dcayAxis = {400, -10.0, 10.0, "#mu^{+}#mu^{-} DCA_{y} (cm)"};
+      AxisSpec dcaMftxAxis = {400, -1.0, 1.0, "#mu^{+}#mu^{-} DCA_{x} (cm)"};
+      AxisSpec dcaMftyAxis = {400, -1.0, 1.0, "#mu^{+}#mu^{-} DCA_{y} (cm)"};
 
       // di-muon invariant mass distributions
       registry.add("dimuon/invariantMass_MuonKine_MuonCuts", "#mu^{+}#mu^{-} invariant mass (muon cuts)", {HistType::kTHnSparseF, {invMassAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
@@ -665,6 +669,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       registry.add("dimuon/invariantMass_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} invariant mass (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {invMassAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       // difference in mu+mu- opening angle between MCH and global muon tracks
       registry.add("dimuon/angle_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} opening angle difference (global muon cuts, good matches)", {HistType::kTHnSparseF, {angleDiffAxis, angleAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      // mu+mu- DCA
+      registry.add("dimuon/dcax_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{x} (muon cuts)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/dcay_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{y} (muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/dcay_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{y} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {dcaMftxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{y} (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {dcaMftyAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
 
       // di-muon invariant mass distributions (realigned/refitted tracks)
       registry.add("dimuon/realign/invariantMass_MuonKine_MuonCuts", "#mu^{+}#mu^{-} invariant mass (muon cuts)", {HistType::kTHnSparseF, {invMassAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
@@ -672,6 +683,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       registry.add("dimuon/realign/invariantMass_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} invariant mass (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {invMassAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       // difference in mu+mu- opening angle between MCH and global muon tracks (realigned/refitted tracks)
       registry.add("dimuon/realign/angle_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} opening angle difference (global muon cuts, good matches)", {HistType::kTHnSparseF, {angleDiffAxis, angleAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      // mu+mu- DCA
+      registry.add("dimuon/realign/dcax_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{x} (muon cuts)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/realign/dcay_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{y} (muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/realign/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/realign/dcay_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{y} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/realign/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {dcaMftxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/realign/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{y} (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {dcaMftyAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
     }
   }
 
@@ -2593,8 +2611,20 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     double mass = mumu4mom.M(); \
     int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX()))); \
     int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX()))); \
-    int mumuQuadrant = (sign1 > 0) ? (quadrant1 * 4 + quadrant2) : (quadrant2 * 4 + quadrant1); \
     registry.get<THnSparse>(HIST(histName))->Fill(mass, p, pT, quadrant1, quadrant2); \
+  }
+
+#define FILL_DIMUON_DCA_PLOTS(trackPar1, trackPar2, trackPar1AtVertex, trackPar2AtVertex, trackPar1AtDca, trackPar2AtDca, histNameX, histNameY) \
+  { \
+    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex); \
+    double p = mumu4mom.P(); \
+    double pT = mumu4mom.Pt(); \
+    double dcax = trackPar1AtDca.getX() - trackPar2AtDca.getX(); \
+    double dcay = trackPar1AtDca.getY() - trackPar2AtDca.getY(); \
+    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX()))); \
+    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX()))); \
+    registry.get<THnSparse>(HIST(histNameX))->Fill(dcax, p, pT, quadrant1, quadrant2); \
+    registry.get<THnSparse>(HIST(histNameY))->Fill(dcay, p, pT, quadrant1, quadrant2); \
   }
 
 #define FILL_DIMUON_ANGLE_PLOT(trackPar1, trackPar2, trackPar1AtVertex, trackPar2AtVertex, mchAngle, fwdAngle, histName) \
@@ -2605,7 +2635,6 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     double dAngle = mchAngle - fwdAngle; \
     int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX()))); \
     int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX()))); \
-    int mumuQuadrant = (sign1 > 0) ? (quadrant1 * 4 + quadrant2) : (quadrant2 * 4 + quadrant1); \
     registry.get<THnSparse>(HIST(histName))->Fill(dAngle, fwdAngle, p, pT, quadrant1, quadrant2); \
   }
 
@@ -2657,8 +2686,10 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         continue;
       }
       const auto& mchTrackPar1 = mchTrackParIt1->second;
+      auto mchTrackPar1AtDca = PropagateMCHParam(FwdtoMCH(mchTrackPar1), collision.posZ());
       auto mchTrackPar1AtVertex = PropagateMCHToVertex(mchTrackPar1, collision);
       const auto& mchTrackPar2 = mchTrackParIt2->second;
+      auto mchTrackPar2AtDca = PropagateMCHParam(FwdtoMCH(mchTrackPar2), collision.posZ());
       auto mchTrackPar2AtVertex = PropagateMCHToVertex(mchTrackPar2, collision);
 
       // get the pre-stored MCH track parameters after refit
@@ -2671,12 +2702,23 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         continue;
       }
       const auto& mchTrackParNew1 = mchTrackParNewIt1->second;
+      auto mchTrackParNew1AtDca = PropagateMCHParam(FwdtoMCH(mchTrackParNew1), collision.posZ());
       auto mchTrackParNew1AtVertex = PropagateMCHToVertex(mchTrackParNew1, collision);
       const auto& mchTrackParNew2 = mchTrackParNewIt2->second;
+      auto mchTrackParNew2AtDca = PropagateMCHParam(FwdtoMCH(mchTrackParNew2), collision.posZ());
       auto mchTrackParNew2AtVertex = PropagateMCHToVertex(mchTrackParNew2, collision);
 
       FILL_DIMUON_PLOT(mchTrackPar1, mchTrackPar2, mchTrackPar1AtVertex, mchTrackPar2AtVertex, "dimuon/invariantMass_MuonKine_MuonCuts");
       FILL_DIMUON_PLOT(mchTrackParNew1, mchTrackParNew2, mchTrackParNew1AtVertex, mchTrackParNew2AtVertex, "dimuon/realign/invariantMass_MuonKine_MuonCuts");
+
+      FILL_DIMUON_DCA_PLOTS(mchTrackPar1, mchTrackPar2,
+                            mchTrackPar1AtVertex, mchTrackPar2AtVertex,
+                            mchTrackPar1AtDca, mchTrackPar2AtDca,
+                            "dimuon/dcax_MuonKine_MuonCuts", "dimuon/dcay_MuonKine_MuonCuts");
+      FILL_DIMUON_DCA_PLOTS(mchTrackParNew1, mchTrackParNew2,
+                            mchTrackParNew1AtVertex, mchTrackParNew2AtVertex,
+                            mchTrackParNew1AtDca, mchTrackParNew2AtDca,
+                            "dimuon/realign/dcax_MuonKine_MuonCuts", "dimuon/realign/dcay_MuonKine_MuonCuts");
 
       double mchAngle = getMuMuAngle(mchTrackPar1AtVertex, mchTrackPar2AtVertex);
       double mchAngleNew = getMuMuAngle(mchTrackParNew1AtVertex, mchTrackParNew2AtVertex);
@@ -2706,20 +2748,42 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         FILL_DIMUON_PLOT(mchTrackPar1, mchTrackPar2, mchTrackPar1AtVertex, mchTrackPar2AtVertex, "dimuon/invariantMass_MuonKine_GlobalMuonCuts_GoodMatches");
         FILL_DIMUON_PLOT(mchTrackParNew1, mchTrackParNew2, mchTrackParNew1AtVertex, mchTrackParNew2AtVertex, "dimuon/realign/invariantMass_MuonKine_GlobalMuonCuts_GoodMatches");
 
+        FILL_DIMUON_DCA_PLOTS(mchTrackPar1, mchTrackPar2,
+                              mchTrackPar1AtVertex, mchTrackPar2AtVertex,
+                              mchTrackPar1AtDca, mchTrackPar2AtDca,
+                              "dimuon/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "dimuon/dcay_MuonKine_GlobalMuonCuts_GoodMatches");
+        FILL_DIMUON_DCA_PLOTS(mchTrackParNew1, mchTrackParNew2,
+                              mchTrackParNew1AtVertex, mchTrackParNew2AtVertex,
+                              mchTrackParNew1AtDca, mchTrackParNew2AtDca,
+                              "dimuon/realign/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "dimuon/realign/dcay_MuonKine_GlobalMuonCuts_GoodMatches");
+
         auto mftIndex1 = fwdTrack1.matchMFTTrackId();
         auto mftIndex2 = fwdTrack2.matchMFTTrackId();
 
         const auto mftTrackPar1 = mMftTrackPars.at(mftIndex1);
+        auto fwdTrackPar1AtDca = PropagateMFTToDCA(mftTrackPar1, mchTrackPar1, collision, cfgVertexZshift);
         auto fwdTrackPar1AtVertex = PropagateMFTToVertex(mftTrackPar1, mchTrackPar1, collision);
         const auto mftTrackPar2 = mMftTrackPars.at(mftIndex2);
+        auto fwdTrackPar2AtDca = PropagateMFTToDCA(mftTrackPar2, mchTrackPar2, collision, cfgVertexZshift);
         auto fwdTrackPar2AtVertex = PropagateMFTToVertex(mftTrackPar2, mchTrackPar2, collision);
         const auto mftTrackParNew1 = mMftTrackParsNew.at(mftIndex1);
+        auto fwdTrackParNew1AtDca = PropagateMFTToDCA(mftTrackParNew1, mchTrackParNew1, collision, cfgVertexZshift);
         auto fwdTrackParNew1AtVertex = PropagateMFTToVertex(mftTrackParNew1, mchTrackParNew1, collision);
         const auto mftTrackParNew2 = mMftTrackParsNew.at(mftIndex2);
+        auto fwdTrackParNew2AtDca = PropagateMFTToDCA(mftTrackParNew2, mchTrackParNew2, collision, cfgVertexZshift);
         auto fwdTrackParNew2AtVertex = PropagateMFTToVertex(mftTrackParNew2, mchTrackParNew2, collision);
 
         FILL_DIMUON_PLOT(mchTrackPar1, mchTrackPar2, fwdTrackPar1AtVertex, fwdTrackPar2AtVertex, "dimuon/invariantMass_ScaledMftKine_GlobalMuonCuts_GoodMatches");
         FILL_DIMUON_PLOT(mchTrackParNew1, mchTrackParNew2, fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex, "dimuon/realign/invariantMass_ScaledMftKine_GlobalMuonCuts_GoodMatches");
+
+        FILL_DIMUON_DCA_PLOTS(mchTrackPar1, mchTrackPar2,
+                              fwdTrackPar1AtVertex, fwdTrackPar2AtVertex,
+                              fwdTrackPar1AtDca, fwdTrackPar2AtDca,
+                              "dimuon/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "dimuon/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches");
+        FILL_DIMUON_DCA_PLOTS(mchTrackParNew1, mchTrackParNew2,
+                              fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex,
+                              fwdTrackParNew1AtDca, fwdTrackParNew2AtDca,
+                              "dimuon/realign/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "dimuon/realign/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches");
 
         double fwdAngle = getMuMuAngle(fwdTrackPar1AtVertex, fwdTrackPar2AtVertex);
         double fwdAngleNew = getMuMuAngle(fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex);
