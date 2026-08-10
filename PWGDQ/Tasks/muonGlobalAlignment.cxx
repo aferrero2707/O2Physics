@@ -18,12 +18,15 @@
 
 #include "Common/CCDB/EventSelectionParams.h"
 #include "Common/CCDB/RCTSelectionFlags.h"
+#include "Common/Core/RecoDecay.h"
 #include "Common/DataModel/EventSelection.h"
 #include "Common/DataModel/TrackSelectionTables.h"
 #include "Common/Core/fwdtrackUtilities.h"
 
 #include <CCDB/BasicCCDBManager.h>
 #include <CCDB/CcdbApi.h>
+#include <CommonConstants/MathConstants.h>
+#include <CommonUtils/ConfigurableParam.h>
 #include <DataFormatsParameters/GRPMagField.h>
 #include <DetectorsBase/GeometryManager.h>
 #include <DetectorsBase/Propagator.h>
@@ -81,8 +84,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include <math.h>
-
 using namespace o2;
 using namespace o2::mch;
 using namespace o2::framework;
@@ -112,7 +113,6 @@ using MyMFTCovariance = MyMFTCovariances::iterator;
 using SMatrix55 = ROOT::Math::SMatrix<double, 5, 5, ROOT::Math::MatRepSym<double, 5>>;
 using SMatrix5 = ROOT::Math::SVector<Double_t, 5>;
 
-static o2::globaltracking::MatchGlobalFwd sExtrap;
 
 using o2::dataformats::GlobalFwdTrack;
 using o2::track::TrackParCovFwd;
@@ -224,7 +224,7 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
   int mRunNumber{0}; // needed to detect if the run changed and trigger update of magnetic field
 
-  Service<o2::ccdb::BasicCCDBManager> ccdbManager;
+  Service<o2::ccdb::BasicCCDBManager> ccdbManager{};
   o2::field::MagneticField* fieldB{nullptr};
   o2::ccdb::CcdbApi ccdbApi;
 
@@ -349,8 +349,8 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       TrackExtrap::setField();
       TrackExtrap::useExtrapV2();
       fieldB = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField()); // for MFT
-      double centerMFT[3] = {0, 0, -61.4};                                                         // or use middle point between Vtx and MFT?
-      mBzAtMftCenter = fieldB->getBz(centerMFT);
+      std::array<double, 3> centerMFT{0, 0, -61.4};                                                // or use middle point between Vtx and MFT?
+      mBzAtMftCenter = fieldB->getBz(centerMFT.data());
 
       /*std::ofstream magFieldMap("mag-field.txt");
       for (float z = 500; z <= 1500; z += 1) {
@@ -462,10 +462,10 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         LOG(info) << "  y: " << it->value["y"].GetDouble();
         LOG(info) << "  z: " << it->value["z"].GetDouble();
 
-        mMchAlignmentCorrections[std::stoi(it->name.GetString())] = {
-          it->value["x"].GetDouble(),
-          it->value["y"].GetDouble(),
-          it->value["z"].GetDouble()};
+        mMchAlignmentCorrections[std::stoi(it->name.GetString())] = AlignmentCorrections{
+          .x = it->value["x"].GetDouble(),
+          .y = it->value["y"].GetDouble(),
+          .z = it->value["z"].GetDouble()};
       }
     } else {
       LOG(error) << "JSON parse error: " << rapidjson::GetParseErrorFunc(jsonOk.Code()) << " (" << jsonOk.Offset() << ")";
@@ -660,8 +660,8 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       AxisSpec angleDiffAxis = {500, -0.05, 0.05, "#mu^{+}#mu^{-} angle difference (rad)"};
       AxisSpec dcaxAxis = {400, -10.0, 10.0, "#mu^{+}#mu^{-} DCA_{x} (cm)"};
       AxisSpec dcayAxis = {400, -10.0, 10.0, "#mu^{+}#mu^{-} DCA_{y} (cm)"};
-      AxisSpec dcaMftxAxis = {400, -1.0, 1.0, "#mu^{+}#mu^{-} DCA_{x} (cm)"};
-      AxisSpec dcaMftyAxis = {400, -1.0, 1.0, "#mu^{+}#mu^{-} DCA_{y} (cm)"};
+      AxisSpec dcaMftxAxis = {400, -0.5, 0.5, "#mu^{+}#mu^{-} DCA_{x} (cm)"};
+      AxisSpec dcaMftyAxis = {400, -0.5, 0.5, "#mu^{+}#mu^{-} DCA_{y} (cm)"};
 
       // di-muon invariant mass distributions
       registry.add("dimuon/invariantMass_MuonKine_MuonCuts", "#mu^{+}#mu^{-} invariant mass (muon cuts)", {HistType::kTHnSparseF, {invMassAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
@@ -671,7 +671,7 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       registry.add("dimuon/angle_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} opening angle difference (global muon cuts, good matches)", {HistType::kTHnSparseF, {angleDiffAxis, angleAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       // mu+mu- DCA
       registry.add("dimuon/dcax_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{x} (muon cuts)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
-      registry.add("dimuon/dcay_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{y} (muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/dcay_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{y} (muon cuts)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       registry.add("dimuon/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       registry.add("dimuon/dcay_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{y} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       registry.add("dimuon/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {dcaMftxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
@@ -685,7 +685,7 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       registry.add("dimuon/realign/angle_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} opening angle difference (global muon cuts, good matches)", {HistType::kTHnSparseF, {angleDiffAxis, angleAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       // mu+mu- DCA
       registry.add("dimuon/realign/dcax_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{x} (muon cuts)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
-      registry.add("dimuon/realign/dcay_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{y} (muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
+      registry.add("dimuon/realign/dcay_MuonKine_MuonCuts", "#mu^{+}#mu^{-} DCA_{y} (muon cuts)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       registry.add("dimuon/realign/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcaxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       registry.add("dimuon/realign/dcay_MuonKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{y} (global muon cuts, good matches)", {HistType::kTHnSparseF, {dcayAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
       registry.add("dimuon/realign/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} DCA_{x} (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {dcaMftxAxis, pAxis, pTAxis, muPosQuadrantAxis, muNegQuadrantAxis}});
@@ -695,13 +695,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
   int GetDetElemId(int iDetElemNumber)
   {
-    const int fgNCh = 10;
-    const int fgNDetElemCh[fgNCh] = {4, 4, 4, 4, 18, 18, 26, 26, 26, 26};
-    const int fgSNDetElemCh[fgNCh + 1] = {0, 4, 8, 12, 16, 34, 52, 78, 104, 130, 156};
+    constexpr int fgNCh = 10;
+    const std::array<int, fgNCh> fgNDetElemCh{4, 4, 4, 4, 18, 18, 26, 26, 26, 26};
+    const std::array<int, fgNCh + 1> fgSNDetElemCh{0, 4, 8, 12, 16, 34, 52, 78, 104, 130, 156};
 
     // make sure detector number is valid
-    if (!(iDetElemNumber >= fgSNDetElemCh[0] &&
-          iDetElemNumber < fgSNDetElemCh[10])) {
+    if (iDetElemNumber < fgSNDetElemCh[0] ||
+        iDetElemNumber >= fgSNDetElemCh[10]) {
       LOGF(fatal, "Invalid detector element number: %d", iDetElemNumber);
     }
     /// get det element number from ID
@@ -717,7 +717,7 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     }
 
     // make sure detector index is valid
-    if (!(iCh > 0 && iCh <= NMchChambers && iDet < fgNDetElemCh[iCh - 1])) {
+    if (iCh <= 0 || iCh > NMchChambers || iDet >= fgNDetElemCh[iCh - 1]) {
       LOGF(fatal, "Invalid detector element id: %d", 100 * iCh + iDet);
     }
 
@@ -823,18 +823,16 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     // MCH track format.
 
     // Parameter conversion
-    double alpha1, alpha3, alpha4, x2, x3, x4;
-
-    x2 = fwdtrack.getPhi();
-    x3 = fwdtrack.getTanl();
-    x4 = fwdtrack.getInvQPt();
+    double x2 = fwdtrack.getPhi();
+    double x3 = fwdtrack.getTanl();
+    double x4 = fwdtrack.getInvQPt();
 
     auto sinx2 = TMath::Sin(x2);
     auto cosx2 = TMath::Cos(x2);
 
-    alpha1 = cosx2 / x3;
-    alpha3 = sinx2 / x3;
-    alpha4 = x4 / TMath::Sqrt(x3 * x3 + sinx2 * sinx2);
+    double alpha1 = cosx2 / x3;
+    double alpha3 = sinx2 / x3;
+    double alpha4 = x4 / TMath::Sqrt(x3 * x3 + sinx2 * sinx2);
 
     auto K = TMath::Sqrt(x3 * x3 + sinx2 * sinx2);
     auto K3 = K * K * K;
@@ -879,11 +877,11 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     // jacobian*covariances*jacobian^T
     covariances = ROOT::Math::Similarity(jacobian, covariances);
 
-    double cov[] = {covariances(0, 0), covariances(1, 0), covariances(1, 1), covariances(2, 0), covariances(2, 1), covariances(2, 2), covariances(3, 0), covariances(3, 1), covariances(3, 2), covariances(3, 3), covariances(4, 0), covariances(4, 1), covariances(4, 2), covariances(4, 3), covariances(4, 4)};
-    double param[] = {fwdtrack.getX(), alpha1, fwdtrack.getY(), alpha3, alpha4};
+    const double cov[15]{covariances(0, 0), covariances(1, 0), covariances(1, 1), covariances(2, 0), covariances(2, 1), covariances(2, 2), covariances(3, 0), covariances(3, 1), covariances(3, 2), covariances(3, 3), covariances(4, 0), covariances(4, 1), covariances(4, 2), covariances(4, 3), covariances(4, 4)};
+    const double param[5]{fwdtrack.getX(), alpha1, fwdtrack.getY(), alpha3, alpha4};
 
     o2::mch::TrackParam convertedTrack(fwdtrack.getZ(), param, cov);
-    return o2::mch::TrackParam(convertedTrack);
+    return {convertedTrack};
   }
 
   static o2::dataformats::GlobalFwdTrack MCHtoFwd(const o2::mch::TrackParam& mchParam)
@@ -897,15 +895,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     o2::dataformats::GlobalFwdTrack convertedTrack;
 
     // Parameter conversion
-    double alpha1, alpha3, alpha4, x2, x3, x4;
+    double alpha1 = mchParam.getNonBendingSlope();
+    double alpha3 = mchParam.getBendingSlope();
+    double alpha4 = mchParam.getInverseBendingMomentum();
 
-    alpha1 = mchParam.getNonBendingSlope();
-    alpha3 = mchParam.getBendingSlope();
-    alpha4 = mchParam.getInverseBendingMomentum();
-
-    x2 = TMath::ATan2(-alpha3, -alpha1);
-    x3 = -1. / TMath::Sqrt(alpha3 * alpha3 + alpha1 * alpha1);
-    x4 = alpha4 * -x3 * TMath::Sqrt(1 + alpha3 * alpha3);
+    double x2 = TMath::ATan2(-alpha3, -alpha1);
+    double x3 = -1. / TMath::Sqrt(alpha3 * alpha3 + alpha1 * alpha1);
+    double x4 = alpha4 * -x3 * TMath::Sqrt(1 + alpha3 * alpha3);
 
     auto K = alpha1 * alpha1 + alpha3 * alpha3;
     auto K32 = K * TMath::Sqrt(K);
@@ -1017,14 +1013,14 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       if (track.getNClusters() < NMchChambers) {
         removeTrack = true;
         break;
-      } else {
-        while (itNextToNextParam != track.end()) {
-          if (itNextToNextParam->getClusterPtr()->getChamberId() != itNextParam->getClusterPtr()->getChamberId()) {
-            itStartingParam = std::make_reverse_iterator(++itNextParam);
-            break;
-          }
-          ++itNextToNextParam;
+      }
+
+      while (itNextToNextParam != track.end()) {
+        if (itNextToNextParam->getClusterPtr()->getChamberId() != itNextParam->getClusterPtr()->getChamberId()) {
+          itStartingParam = std::make_reverse_iterator(++itNextParam);
+          break;
         }
+        ++itNextToNextParam;
       }
     }
 
@@ -1082,11 +1078,8 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     double pResEffect = sigmaPDCA / (1. - nrp / (1. + nrp));
     double slopeResEffect = SlopeResolutionZ * slopeRes * p;
     double sigmaPDCAWithRes = TMath::Sqrt(pResEffect * pResEffect + slopeResEffect * slopeResEffect);
-    if (pDCA > nSigmaPDCA * sigmaPDCAWithRes) {
-      return false;
-    }
 
-    return true;
+    return (pDCA <= nSigmaPDCA * sigmaPDCAWithRes);
   }
 
   template <class T, class C>
@@ -1852,7 +1845,7 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       std::cout << std::format("    Cluster after corrections:  {:+0.5f} {:+0.5f} {:+0.5f}", master.x(), master.y(), master.z()) << std::endl;
 
       // realigned MCH cluster
-      mch::Cluster* clusterMCH = new mch::Cluster();
+      auto clusterMCH = new mch::Cluster();
       clusterMCH->x = master.x();
       clusterMCH->y = master.y();
       clusterMCH->z = master.z();
@@ -1901,31 +1894,6 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     }
 
     return !removable;
-  }
-
-  template <class COLL, class BC, class TMUON>
-  void InitCollisionsRun2(COLL const& collisions,
-                          BC const& bcs,
-                          TMUON const& muonTracks,
-                          std::map<uint64_t, CollisionInfo>& collisionInfos)
-  {
-    // fill collision information for global muon tracks (MFT-MCH-MID matches)
-    for (auto muonTrack : muonTracks) {
-      if (!muonTrack.has_collision())
-        continue;
-
-      auto collision = collisions.rawIteratorAt(muonTrack.collisionId());
-      uint64_t collisionIndex = collision.globalIndex();
-
-      auto bc = bcs.rawIteratorAt(collision.bcId());
-
-      auto& collisionInfo = collisionInfos[collisionIndex];
-      collisionInfo.bc = bc.globalBC();
-      collisionInfo.zVertex = collision.posZ();
-
-      uint64_t mchTrackIndex = muonTrack.globalIndex();
-      collisionInfo.mchTracks.push_back(mchTrackIndex);
-    }
   }
 
   template <class COLL, class BC, class TMUON>
@@ -2063,6 +2031,31 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     }
   }
 
+  template <class COLL, class BC, class TMUON>
+  void InitCollisionsRun2(COLL const& collisions,
+                          BC const& bcs,
+                          TMUON const& muonTracks,
+                          std::map<uint64_t, CollisionInfo>& collisionInfos)
+  {
+    // fill collision information for global muon tracks (MFT-MCH-MID matches)
+    for (auto muonTrack : muonTracks) {
+      if (!muonTrack.has_collision())
+        continue;
+
+      auto collision = collisions.rawIteratorAt(muonTrack.collisionId());
+      uint64_t collisionIndex = collision.globalIndex();
+
+      auto bc = bcs.rawIteratorAt(collision.bcId());
+
+      auto& collisionInfo = collisionInfos[collisionIndex];
+      collisionInfo.bc = bc.globalBC();
+      collisionInfo.zVertex = collision.posZ();
+
+      uint64_t mchTrackIndex = muonTrack.globalIndex();
+      collisionInfo.mchTracks.push_back(mchTrackIndex);
+    }
+  }
+
   void FillMftPlots(MyEvents const& collisions,
                     MyBCs const& bcs,
                     MyMuonsWithCov const& muonTracks,
@@ -2122,9 +2115,9 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           double chi2NDF = static_cast<double>(mftNclusters) * 2 - 5;
 
           const int nMftLayers = 10;
-          std::array<bool, 10> firedLayers;
+          std::array<bool, 10> firedLayers{false};
           for (int layer = 0; layer < nMftLayers; layer++) {
-            if ((mftTrack.mftClusterSizesAndTrackFlags() >> (layer * 6)) & 0x3F) {
+            if (((mftTrack.mftClusterSizesAndTrackFlags() >> (layer * 6)) & 0x3F) != 0) {
               firedLayers[layer] = true;
             } else {
               firedLayers[layer] = false;
@@ -2178,9 +2171,9 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
             static constexpr int nMftClustersMin = 6;
             if (mftTrack.chi2() <= cfgTrackChi2MftUp && std::fabs(collision.posZ()) < 1.f && mftNclusters >= nMftClustersMin) {
               static constexpr int nPoints = 21;
-              float zshift[nPoints] = {// in millimeters
-                                       -5.0, -4.5, -4.0, -3.5, -3.0, -2.5, -2.0, -1.5, -1.0, -0.5, 0.0,
-                                       0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0};
+              const std::array<float, nPoints> zshift{// in millimeters
+                                                      -5.0, -4.5, -4.0, -3.5, -3.0, -2.5, -2.0, -1.5, -1.0, -0.5, 0.0,
+                                                      0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0};
               for (int zi = 0; zi < nPoints; zi++) {
                 auto mftTrackAtDCAshifted = PropagateMFTToDCA(mftTrackPar, collision, zshift[zi] / 10.f);
                 double dcaxShifted = mftTrackAtDCAshifted.getX() - collision.posX();
@@ -2390,11 +2383,11 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
             }
 
             // MFT-MCH residuals from original alignment
-            auto mftTrackAtCluster = PropagateMFTtoMCH(mftTrackPar, FwdtoMCH(mchTrackPar), master.z());
-            auto mftTrackParamAtCluster = FwdtoMCH(mftTrackAtCluster);
+            const auto mftTrackAtCluster = PropagateMFTtoMCH(mftTrackPar, FwdtoMCH(mchTrackPar), master.z());
+            const auto mftTrackParamAtCluster = FwdtoMCH(mftTrackAtCluster);
 
-            std::array<double, 2> xPos{master.x(), mftTrackAtCluster.getX()};
-            std::array<double, 2> yPos{master.y(), mftTrackAtCluster.getY()};
+            const std::array<double, 2> xPos{master.x(), mftTrackAtCluster.getX()};
+            const std::array<double, 2> yPos{master.y(), mftTrackAtCluster.getY()};
 
             registry.get<THnSparse>(HIST("residuals/dx_vs_chamber"))->Fill(chamber + 1, quadrant, posNeg, xPos[0] - xPos[1]);
             registry.get<THnSparse>(HIST("residuals/dy_vs_chamber"))->Fill(chamber + 1, quadrant, posNeg, yPos[0] - yPos[1]);
@@ -2407,11 +2400,11 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
             // by taking the momentum from the MCH track refitted with the alignment corrections and the new
             // alignment (if realignment is enabled)
             if (!mchTrackParNew.isRemovable()) {
-              auto mftTrackAtClusterWithCorr = PropagateMFTtoMCH(mftTrackParNew, FwdtoMCH(mchTrackParNew), masterRealign.z());
-              auto mftTrackParamAtClusterWithCorr = FwdtoMCH(mftTrackAtClusterWithCorr);
+              const auto mftTrackAtClusterWithCorr = PropagateMFTtoMCH(mftTrackParNew, FwdtoMCH(mchTrackParNew), masterRealign.z());
+              const auto mftTrackParamAtClusterWithCorr = FwdtoMCH(mftTrackAtClusterWithCorr);
 
-              std::array<double, 2> xPos{masterRealign.x(), mftTrackAtClusterWithCorr.getX()};
-              std::array<double, 2> yPos{masterRealign.y(), mftTrackAtClusterWithCorr.getY()};
+              const std::array<double, 2> xPos{masterRealign.x(), mftTrackAtClusterWithCorr.getX()};
+              const std::array<double, 2> yPos{masterRealign.y(), mftTrackAtClusterWithCorr.getY()};
 
               registry.get<THnSparse>(HIST("residuals/dx_vs_chamber_corr"))->Fill(chamber + 1, quadrant, posNeg, xPos[0] - xPos[1]);
               registry.get<THnSparse>(HIST("residuals/dy_vs_chamber_corr"))->Fill(chamber + 1, quadrant, posNeg, yPos[0] - yPos[1]);
@@ -2433,9 +2426,9 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
             }
           }
 
-          auto mchTrackAtDCA = PropagateMCHParam(FwdtoMCH(mchTrackPar), collision.posZ());
-          auto dcax = mchTrackAtDCA.getX() - collision.posX();
-          auto dcay = mchTrackAtDCA.getY() - collision.posY();
+          const auto mchTrackAtDCA = PropagateMCHParam(FwdtoMCH(mchTrackPar), collision.posZ());
+          const auto dcax = mchTrackAtDCA.getX() - collision.posX();
+          const auto dcay = mchTrackAtDCA.getY() - collision.posY();
 
           registry.get<TH2>(HIST("DCA/MCH/DCA_y_vs_x"))->Fill(dcax, dcay);
           registry.get<THnSparse>(HIST("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_mom"))->Fill(mchTrackPar.getP(), quadrant, posNeg, dcax);
@@ -2444,15 +2437,15 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           if (cfgEnableMftMchResidualsExtraPlots) {
             registry.get<THnSparse>(HIST("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_vz"))->Fill(collision.posZ(), quadrant, posNeg, dcax);
             registry.get<THnSparse>(HIST("DCA/MCH/DCA_y_vs_sign_vs_quadrant_vs_vz"))->Fill(collision.posZ(), quadrant, posNeg, dcay);
-            auto mchTrackAtMFT = PropagateMCHParam(FwdtoMCH(mchTrackPar), mftTrack.z());
-            double deltaPhi = mchTrackAtMFT.getPhi() - mftTrack.phi();
+            const auto mchTrackAtMFT = PropagateMCHParam(FwdtoMCH(mchTrackPar), mftTrack.z());
+            const double deltaPhi = mchTrackAtMFT.getPhi() - mftTrack.phi();
             registry.get<THnSparse>(HIST("residuals/dphi_at_mft"))->Fill(deltaPhi, mftTrack.x(), mftTrack.y(), posNeg, mchTrackAtMFT.getP());
           }
 
           if (!mchTrackParNew.isRemovable()) {
-            auto mchTrackAtDCAWithCorr = PropagateMCHParam(FwdtoMCH(mchTrackParNew), collision.posZ());
-            auto dcax = mchTrackAtDCAWithCorr.getX() - collision.posX();
-            auto dcay = mchTrackAtDCAWithCorr.getY() - collision.posY();
+            const auto mchTrackAtDCAWithCorr = PropagateMCHParam(FwdtoMCH(mchTrackParNew), collision.posZ());
+            const auto dcax = mchTrackAtDCAWithCorr.getX() - collision.posX();
+            const auto dcay = mchTrackAtDCAWithCorr.getY() - collision.posY();
 
             registry.get<THnSparse>(HIST("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_mom_corr"))->Fill(mchTrackParNew.getP(), quadrant, posNeg, dcax);
             registry.get<THnSparse>(HIST("DCA/MCH/DCA_y_vs_sign_vs_quadrant_vs_mom_corr"))->Fill(mchTrackParNew.getP(), quadrant, posNeg, dcay);
@@ -2507,11 +2500,11 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
             // MCH track/cluster residuals with corrected realigned and/or corrected MCH clusters
             if (!mchTrackParNew.isRemovable()) {
-              auto mchTrackAtClusterWithCorr = PropagateMCHParam(FwdtoMCH(mchTrackParNew), masterRealign.z());
-              auto mchTrackParamAtClusterWithCorr = FwdtoMCH(mchTrackAtClusterWithCorr);
+              const auto mchTrackAtClusterWithCorr = PropagateMCHParam(FwdtoMCH(mchTrackParNew), masterRealign.z());
+              const auto mchTrackParamAtClusterWithCorr = FwdtoMCH(mchTrackAtClusterWithCorr);
 
-              std::array<double, 2> xPos{masterRealign.x(), mchTrackAtClusterWithCorr.getX()};
-              std::array<double, 2> yPos{masterRealign.y(), mchTrackAtClusterWithCorr.getY()};
+              const std::array<double, 2> xPos{masterRealign.x(), mchTrackAtClusterWithCorr.getX()};
+              const std::array<double, 2> yPos{masterRealign.y(), mchTrackAtClusterWithCorr.getY()};
 
               registry.get<THnSparse>(HIST("residuals/MCH/dx_vs_de_corr"))->Fill(xPos[0] - xPos[1], deIndex, quadrant, posNeg, mchTrackParNew.getP(), mchTrackParamAtClusterWithCorr.getNonBendingSlope());
               registry.get<THnSparse>(HIST("residuals/MCH/dy_vs_de_corr"))->Fill(yPos[0] - yPos[1], deIndex, quadrant, posNeg, mchTrackParNew.getP(), mchTrackParamAtClusterWithCorr.getBendingSlope());
@@ -2522,13 +2515,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         // MFT-MCH track residuals analysis
         if (cfgEnableMftMchMatchingAnalysis && !mchTrackParNew.isRemovable() && (matchChi2 <= 10.f)) {
           static constexpr int nRefPlanes = 2;
-          const double refPlaneZ[nRefPlanes] = {cfgRefPlaneZMFT, cfgRefPlaneZMCH};
+          const std::array<double, nRefPlanes> refPlaneZ{cfgRefPlaneZMFT, cfgRefPlaneZMCH};
 
-          std::shared_ptr<THnSparse> dxPlots[2]{registry.get<THnSparse>(HIST("matching/dxAtMFT")), registry.get<THnSparse>(HIST("matching/dxAtMCH"))};
-          std::shared_ptr<THnSparse> dyPlots[2]{registry.get<THnSparse>(HIST("matching/dyAtMFT")), registry.get<THnSparse>(HIST("matching/dyAtMCH"))};
-          std::shared_ptr<THnSparse> dsxPlots[2]{registry.get<THnSparse>(HIST("matching/dsxAtMFT")), registry.get<THnSparse>(HIST("matching/dsxAtMCH"))};
-          std::shared_ptr<THnSparse> dsyPlots[2]{registry.get<THnSparse>(HIST("matching/dsyAtMFT")), registry.get<THnSparse>(HIST("matching/dsyAtMCH"))};
-          std::shared_ptr<THnSparse> dphiPlots[2]{registry.get<THnSparse>(HIST("matching/dphiAtMFT")), registry.get<THnSparse>(HIST("matching/dphiAtMCH"))};
+          std::array<std::shared_ptr<THnSparse>, 2> dxPlots{registry.get<THnSparse>(HIST("matching/dxAtMFT")), registry.get<THnSparse>(HIST("matching/dxAtMCH"))};
+          std::array<std::shared_ptr<THnSparse>, 2> dyPlots{registry.get<THnSparse>(HIST("matching/dyAtMFT")), registry.get<THnSparse>(HIST("matching/dyAtMCH"))};
+          std::array<std::shared_ptr<THnSparse>, 2> dsxPlots{registry.get<THnSparse>(HIST("matching/dsxAtMFT")), registry.get<THnSparse>(HIST("matching/dsxAtMCH"))};
+          std::array<std::shared_ptr<THnSparse>, 2> dsyPlots{registry.get<THnSparse>(HIST("matching/dsyAtMFT")), registry.get<THnSparse>(HIST("matching/dsyAtMCH"))};
+          std::array<std::shared_ptr<THnSparse>, 2> dphiPlots{registry.get<THnSparse>(HIST("matching/dphiAtMFT")), registry.get<THnSparse>(HIST("matching/dphiAtMCH"))};
 
           for (int iRefPlane = 0; iRefPlane < nRefPlanes; iRefPlane++) {
             const auto mftTrackAtRefPlane = PropagateMFTtoMCH(mftTrackParNew, FwdtoMCH(mchTrackParNew), refPlaneZ[iRefPlane]);
@@ -2540,8 +2533,8 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
             auto dy = mchTrackAtRefPlane.getY() - mftTrackAtRefPlane.getY();
             dyPlots[iRefPlane]->Fill(dy, refTrackAtRefPlane.getX(), refTrackAtRefPlane.getY(), quadrant, posNeg, mchTrackParNew.getP());
 
-            auto mftParamAtRefPlane = FwdtoMCH(mftTrackAtRefPlane);
-            auto mchParamAtRefPlane = FwdtoMCH(mchTrackAtRefPlane);
+            const auto mftParamAtRefPlane = FwdtoMCH(mftTrackAtRefPlane);
+            const auto mchParamAtRefPlane = FwdtoMCH(mchTrackAtRefPlane);
 
             auto dsx = mchParamAtRefPlane.getNonBendingSlope() - mftParamAtRefPlane.getNonBendingSlope();
             dsxPlots[iRefPlane]->Fill(dsx, refTrackAtRefPlane.getX(), refTrackAtRefPlane.getY(), quadrant, posNeg, mchTrackParNew.getP());
