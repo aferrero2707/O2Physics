@@ -18,9 +18,9 @@
 #include "Common/CCDB/EventSelectionParams.h"
 #include "Common/CCDB/RCTSelectionFlags.h"
 #include "Common/Core/RecoDecay.h"
+#include "Common/Core/fwdtrackUtilities.h"
 #include "Common/DataModel/EventSelection.h"
 #include "Common/DataModel/TrackSelectionTables.h"
-#include "Common/Core/fwdtrackUtilities.h"
 
 #include <CCDB/BasicCCDBManager.h>
 #include <CCDB/CcdbApi.h>
@@ -110,7 +110,6 @@ using MyMFTCovariance = MyMFTCovariances::iterator;
 
 using SMatrix55 = ROOT::Math::SMatrix<double, 5, 5, ROOT::Math::MatRepSym<double, 5>>;
 using SMatrix5 = ROOT::Math::SVector<Double_t, 5>;
-
 
 using o2::dataformats::GlobalFwdTrack;
 using o2::track::TrackParCovFwd;
@@ -1963,7 +1962,7 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         const auto& mftTrack = muonTrack.template matchMFTTrack_as<MyMFTs>();
         // int quadrant = GetQuadrant(mchTrack);
         int quadrant = GetQuadrant(mftTrack);
-        //int quadrantMCH = GetQuadrant(mchTrack);
+        // int quadrantMCH = GetQuadrant(mchTrack);
         int posNeg = (mchTrack.sign() >= 0) ? 0 : 1;
 
         auto mchIndex = mchTrack.globalIndex();
@@ -2142,39 +2141,39 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     }
   }
 
-#define FILL_DIMUON_PLOT(trackPar1, trackPar2, trackPar1AtVertex, trackPar2AtVertex, histName) \
-  { \
-    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex); \
-    double p = mumu4mom.P(); \
-    double pT = mumu4mom.Pt(); \
-    double mass = mumu4mom.M(); \
+#define FILL_DIMUON_PLOT(trackPar1, trackPar2, trackPar1AtVertex, trackPar2AtVertex, histName)       \
+  {                                                                                                  \
+    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);                          \
+    double p = mumu4mom.P();                                                                         \
+    double pT = mumu4mom.Pt();                                                                       \
+    double mass = mumu4mom.M();                                                                      \
     int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX()))); \
     int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX()))); \
-    registry.get<THnSparse>(HIST(histName))->Fill(mass, p, pT, quadrant1, quadrant2); \
+    registry.get<THnSparse>(HIST(histName))->Fill(mass, p, pT, quadrant1, quadrant2);                \
   }
 
 #define FILL_DIMUON_DCA_PLOTS(trackPar1, trackPar2, trackPar1AtVertex, trackPar2AtVertex, trackPar1AtDca, trackPar2AtDca, histNameX, histNameY) \
-  { \
-    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex); \
-    double p = mumu4mom.P(); \
-    double pT = mumu4mom.Pt(); \
-    double dcax = trackPar1AtDca.getX() - trackPar2AtDca.getX(); \
-    double dcay = trackPar1AtDca.getY() - trackPar2AtDca.getY(); \
-    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX()))); \
-    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX()))); \
-    registry.get<THnSparse>(HIST(histNameX))->Fill(dcax, p, pT, quadrant1, quadrant2); \
-    registry.get<THnSparse>(HIST(histNameY))->Fill(dcay, p, pT, quadrant1, quadrant2); \
+  {                                                                                                                                             \
+    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);                                                                     \
+    double p = mumu4mom.P();                                                                                                                    \
+    double pT = mumu4mom.Pt();                                                                                                                  \
+    double dcax = trackPar1AtDca.getX() - trackPar2AtDca.getX();                                                                                \
+    double dcay = trackPar1AtDca.getY() - trackPar2AtDca.getY();                                                                                \
+    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));                                            \
+    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));                                            \
+    registry.get<THnSparse>(HIST(histNameX))->Fill(dcax, p, pT, quadrant1, quadrant2);                                                          \
+    registry.get<THnSparse>(HIST(histNameY))->Fill(dcay, p, pT, quadrant1, quadrant2);                                                          \
   }
 
 #define FILL_DIMUON_ANGLE_PLOT(trackPar1, trackPar2, trackPar1AtVertex, trackPar2AtVertex, mchAngle, fwdAngle, histName) \
-  { \
-    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex); \
-    double p = mumu4mom.P(); \
-    double pT = mumu4mom.Pt(); \
-    double dAngle = mchAngle - fwdAngle; \
-    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX()))); \
-    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX()))); \
-    registry.get<THnSparse>(HIST(histName))->Fill(dAngle, fwdAngle, p, pT, quadrant1, quadrant2); \
+  {                                                                                                                      \
+    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);                                              \
+    double p = mumu4mom.P();                                                                                             \
+    double pT = mumu4mom.Pt();                                                                                           \
+    double dAngle = mchAngle - fwdAngle;                                                                                 \
+    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));                     \
+    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));                     \
+    registry.get<THnSparse>(HIST(histName))->Fill(dAngle, fwdAngle, p, pT, quadrant1, quadrant2);                        \
   }
 
   void FillDimuonPlots(MyEvents const& collisions,
@@ -2209,7 +2208,6 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         if (!goodMuonTracks) {
           continue;
         }
-
 
         // get the pre-stored MCH track parameters
         const auto mchTrackParIt1 = mMchTrackPars.find(mchIndex1);
@@ -2247,13 +2245,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         FILL_DIMUON_PLOT(mchTrackParNew1, mchTrackParNew2, mchTrackParNew1AtVertex, mchTrackParNew2AtVertex, "dimuon/realign/invariantMass_MuonKine_MuonCuts");
 
         FILL_DIMUON_DCA_PLOTS(mchTrackPar1, mchTrackPar2,
-            mchTrackPar1AtVertex, mchTrackPar2AtVertex,
-            mchTrackPar1AtDca, mchTrackPar2AtDca,
-            "dimuon/dcax_MuonKine_MuonCuts", "dimuon/dcay_MuonKine_MuonCuts");
+                              mchTrackPar1AtVertex, mchTrackPar2AtVertex,
+                              mchTrackPar1AtDca, mchTrackPar2AtDca,
+                              "dimuon/dcax_MuonKine_MuonCuts", "dimuon/dcay_MuonKine_MuonCuts");
         FILL_DIMUON_DCA_PLOTS(mchTrackParNew1, mchTrackParNew2,
-            mchTrackParNew1AtVertex, mchTrackParNew2AtVertex,
-            mchTrackParNew1AtDca, mchTrackParNew2AtDca,
-            "dimuon/realign/dcax_MuonKine_MuonCuts", "dimuon/realign/dcay_MuonKine_MuonCuts");
+                              mchTrackParNew1AtVertex, mchTrackParNew2AtVertex,
+                              mchTrackParNew1AtDca, mchTrackParNew2AtDca,
+                              "dimuon/realign/dcax_MuonKine_MuonCuts", "dimuon/realign/dcay_MuonKine_MuonCuts");
 
         double mchAngle = getMuMuAngle(mchTrackPar1AtVertex, mchTrackPar2AtVertex);
         double mchAngleNew = getMuMuAngle(mchTrackParNew1AtVertex, mchTrackParNew2AtVertex);
@@ -2284,13 +2282,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           FILL_DIMUON_PLOT(mchTrackParNew1, mchTrackParNew2, mchTrackParNew1AtVertex, mchTrackParNew2AtVertex, "dimuon/realign/invariantMass_MuonKine_GlobalMuonCuts_GoodMatches");
 
           FILL_DIMUON_DCA_PLOTS(mchTrackPar1, mchTrackPar2,
-              mchTrackPar1AtVertex, mchTrackPar2AtVertex,
-              mchTrackPar1AtDca, mchTrackPar2AtDca,
-              "dimuon/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "dimuon/dcay_MuonKine_GlobalMuonCuts_GoodMatches");
+                                mchTrackPar1AtVertex, mchTrackPar2AtVertex,
+                                mchTrackPar1AtDca, mchTrackPar2AtDca,
+                                "dimuon/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "dimuon/dcay_MuonKine_GlobalMuonCuts_GoodMatches");
           FILL_DIMUON_DCA_PLOTS(mchTrackParNew1, mchTrackParNew2,
-              mchTrackParNew1AtVertex, mchTrackParNew2AtVertex,
-              mchTrackParNew1AtDca, mchTrackParNew2AtDca,
-              "dimuon/realign/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "dimuon/realign/dcay_MuonKine_GlobalMuonCuts_GoodMatches");
+                                mchTrackParNew1AtVertex, mchTrackParNew2AtVertex,
+                                mchTrackParNew1AtDca, mchTrackParNew2AtDca,
+                                "dimuon/realign/dcax_MuonKine_GlobalMuonCuts_GoodMatches", "dimuon/realign/dcay_MuonKine_GlobalMuonCuts_GoodMatches");
 
           auto mftIndex1 = fwdTrack1.matchMFTTrackId();
           auto mftIndex2 = fwdTrack2.matchMFTTrackId();
@@ -2312,13 +2310,13 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           FILL_DIMUON_PLOT(mchTrackParNew1, mchTrackParNew2, fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex, "dimuon/realign/invariantMass_ScaledMftKine_GlobalMuonCuts_GoodMatches");
 
           FILL_DIMUON_DCA_PLOTS(mchTrackPar1, mchTrackPar2,
-              fwdTrackPar1AtVertex, fwdTrackPar2AtVertex,
-              fwdTrackPar1AtDca, fwdTrackPar2AtDca,
-              "dimuon/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "dimuon/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches");
+                                fwdTrackPar1AtVertex, fwdTrackPar2AtVertex,
+                                fwdTrackPar1AtDca, fwdTrackPar2AtDca,
+                                "dimuon/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "dimuon/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches");
           FILL_DIMUON_DCA_PLOTS(mchTrackParNew1, mchTrackParNew2,
-              fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex,
-              fwdTrackParNew1AtDca, fwdTrackParNew2AtDca,
-              "dimuon/realign/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "dimuon/realign/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches");
+                                fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex,
+                                fwdTrackParNew1AtDca, fwdTrackParNew2AtDca,
+                                "dimuon/realign/dcax_ScaledMftKine_GlobalMuonCuts_GoodMatches", "dimuon/realign/dcay_ScaledMftKine_GlobalMuonCuts_GoodMatches");
 
           double fwdAngle = getMuMuAngle(fwdTrackPar1AtVertex, fwdTrackPar2AtVertex);
           double fwdAngleNew = getMuMuAngle(fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex);
