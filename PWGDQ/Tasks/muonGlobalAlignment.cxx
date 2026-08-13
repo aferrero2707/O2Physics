@@ -2155,14 +2155,14 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                                     const T4& trackPar2AtVertex,
                                     HistConfigType histConfig)
   {
-      auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);
-      double p = mumu4mom.P();
-      double pT = mumu4mom.Pt();
-      double mass = mumu4mom.M();
-      int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));
-      int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));
+    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);
+    double p = mumu4mom.P();
+    double pT = mumu4mom.Pt();
+    double mass = mumu4mom.M();
+    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));
+    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));
 
-      registry.get<THnSparse>(histConfig)->Fill(mass, p, pT, quadrant1, quadrant2);
+    registry.get<THnSparse>(histConfig)->Fill(mass, p, pT, quadrant1, quadrant2);
   }
 
   template <typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename HistConfigType1, typename HistConfigType2>
@@ -2175,16 +2175,16 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                                  HistConfigType1 histConfigX,
                                  HistConfigType2 histConfigY)
   {
-      auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);
-      double p = mumu4mom.P();
-      double pT = mumu4mom.Pt();
-      double dcax = trackPar1AtDca.getX() - trackPar2AtDca.getX();
-      double dcay = trackPar1AtDca.getY() - trackPar2AtDca.getY();
-      int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));
-      int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));
+    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);
+    double p = mumu4mom.P();
+    double pT = mumu4mom.Pt();
+    double dcax = trackPar1AtDca.getX() - trackPar2AtDca.getX();
+    double dcay = trackPar1AtDca.getY() - trackPar2AtDca.getY();
+    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));
+    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));
 
-      registry.get<THnSparse>(histConfigX)->Fill(dcax, p, pT, quadrant1, quadrant2);
-      registry.get<THnSparse>(histConfigY)->Fill(dcay, p, pT, quadrant1, quadrant2);
+    registry.get<THnSparse>(histConfigX)->Fill(dcax, p, pT, quadrant1, quadrant2);
+    registry.get<THnSparse>(histConfigY)->Fill(dcay, p, pT, quadrant1, quadrant2);
   }
 
   template <typename T1, typename T2, typename T3, typename T4, typename HistConfigType>
@@ -2196,14 +2196,14 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                                   double fwdAngle,
                                   HistConfigType histConfig)
   {
-      auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);
-      double p = mumu4mom.P();
-      double pT = mumu4mom.Pt();
-      double dAngle = mchAngle - fwdAngle;
-      int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));
-      int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));
+    auto mumu4mom = getMuMu4Momentum(trackPar1AtVertex, trackPar2AtVertex);
+    double p = mumu4mom.P();
+    double pT = mumu4mom.Pt();
+    double dAngle = mchAngle - fwdAngle;
+    int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));
+    int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));
 
-      registry.get<THnSparse>(histConfig)->Fill(dAngle, fwdAngle, p, pT, quadrant1, quadrant2);
+    registry.get<THnSparse>(histConfig)->Fill(dAngle, fwdAngle, p, pT, quadrant1, quadrant2);
   }
 
   void FillDimuonPlots(MyEvents const& collisions,
