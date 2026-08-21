@@ -48,6 +48,7 @@
 #include <RtypesCore.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -143,6 +144,7 @@ DECLARE_SOA_COLUMN(Chi2Glob, chi2Glob, float);
 DECLARE_SOA_COLUMN(Chi2Match, chi2Match, float);
 DECLARE_SOA_COLUMN(IsAmbig, isAmbig, bool);
 DECLARE_SOA_COLUMN(MFTMult, mftMult, int);
+DECLARE_SOA_COLUMN(MatchAttempts, matchAttempts, int);
 DECLARE_SOA_COLUMN(DCAX, dcaX, float);
 DECLARE_SOA_COLUMN(DCAY, dcaY, float);
 DECLARE_SOA_COLUMN(McMaskGlob, mcMaskGlob, int);
@@ -207,6 +209,7 @@ DECLARE_SOA_TABLE(FwdMatchMLCandidates, "AOD", "FWDMLCAND",
                   fwdmatchcandidates::DCAY,
                   fwdmatchcandidates::IsAmbig,
                   fwdmatchcandidates::MFTMult,
+                  fwdmatchcandidates::MatchAttempts,
                   fwdmatchcandidates::McMaskMCH,
                   fwdmatchcandidates::McMaskMFT,
                   fwdmatchcandidates::McMaskGlob,
@@ -265,14 +268,13 @@ struct mftMchMatcher {
     kMatchTypeWrongNonLeading = 5,
     kMatchTypeDecayNonLeading = 6,
     kMatchTypeFakeNonLeading = 7,
-    kMatchTypeUndefined
+    kMatchTypeUndefined = 8
   };
 
-  double mBzAtMftCenter{0};
   o2::globaltracking::MatchGlobalFwd mExtrap;
 
   int mRunNumber{0}; // needed to detect if the run changed and trigger update of magnetic field
-  Service<o2::ccdb::BasicCCDBManager> ccdbManager;
+  Service<o2::ccdb::BasicCCDBManager> ccdbManager{};
   o2::ccdb::CcdbApi fCCDBApi;
 
   o2::parameters::GRPMagField* fGrpMag = nullptr;
@@ -287,6 +289,22 @@ struct mftMchMatcher {
   std::map<uint32_t, bool> fBestMatch;
 
   HistogramRegistry registry{"registry", {}};
+
+  template <typename T, typename C>
+  o2::dataformats::GlobalFwdTrack trackToGlobalFwd(const T& track, const C& cov)
+  {
+    double chi2 = track.chi2();
+    SMatrix5 tpars(track.x(), track.y(), track.phi(), track.tgl(), track.signed1Pt());
+    std::vector<double> v1{cov.cXX(), cov.cXY(), cov.cYY(), cov.cPhiX(), cov.cPhiY(),
+                           cov.cPhiPhi(), cov.cTglX(), cov.cTglY(), cov.cTglPhi(), cov.cTglTgl(),
+                           cov.c1PtX(), cov.c1PtY(), cov.c1PtPhi(), cov.c1PtTgl(), cov.c1Pt21Pt2()};
+    SMatrix55 tcovs(v1.begin(), v1.end());
+    o2::track::TrackParCovFwd trackparCov{track.z(), tpars, tcovs, chi2};
+    o2::dataformats::GlobalFwdTrack fwdtrack;
+    fwdtrack.setParameters(trackparCov.getParameters());
+    fwdtrack.setCovariances(trackparCov.getCovariances());
+    return fwdtrack;
+  }
 
   template <class T, class C>
   bool pDCACut(const T& mchTrack, const C& collision, double nSigmaPDCA)
@@ -316,11 +334,8 @@ struct mftMchMatcher {
     double pResEffect = sigmaPDCA / (1. - nrp / (1. + nrp));
     double slopeResEffect = 535. * slopeRes * p;
     double sigmaPDCAWithRes = TMath::Sqrt(pResEffect * pResEffect + slopeResEffect * slopeResEffect);
-    if (pDCA > nSigmaPDCA * sigmaPDCAWithRes) {
-      return false;
-    }
 
-    return true;
+    return (pDCA <= nSigmaPDCA * sigmaPDCAWithRes);
   }
 
   template <class T, class C>
@@ -333,8 +348,9 @@ struct mftMchMatcher {
                   double nSigmaPdcaCut)
   {
     // chi2 cut
-    if (mchTrack.chi2() > chi2Cut)
+    if (mchTrack.chi2() > chi2Cut) {
       return false;
+    }
 
     // momentum cut
     if (mchTrack.p() < pCut) {
@@ -373,8 +389,9 @@ struct mftMchMatcher {
                  std::array<double, 2> etaCut)
   {
     // chi2 cut
-    if (mftTrack.chi2() > chi2Cut)
+    if (mftTrack.chi2() > chi2Cut) {
       return false;
+    }
 
     // transverse momentum cut
     if (mftTrack.pt() < pTCut) {
@@ -393,8 +410,9 @@ struct mftMchMatcher {
   template <typename BC>
   void initCCDB(BC const& bc)
   {
-    if (mRunNumber == bc.runNumber())
+    if (mRunNumber == bc.runNumber()) {
       return;
+    }
 
     fGrpMag = ccdbManager->getForTimeStamp<o2::parameters::GRPMagField>(grpmagPath, bc.timestamp());
 
@@ -470,7 +488,7 @@ struct mftMchMatcher {
         }
       }
     }
-    for (auto& pairCand : mCandidates) {
+    for (const auto& pairCand : mCandidates) {
       fBestMatch[pairCand.second.second] = true;
     }
   }
@@ -522,8 +540,9 @@ struct mftMchMatcher {
   bool isPairedMuon(int64_t muonTrackId, const std::vector<std::pair<int64_t, int64_t>>& matchablePairs)
   {
     for (const auto& [id1, id2] : matchablePairs) {
-      if (muonTrackId == id1)
+      if (muonTrackId == id1) {
         return true;
+      }
     }
     return false;
   }
@@ -531,6 +550,9 @@ struct mftMchMatcher {
   template <class TMCH, class TMFTs>
   bool isDecay(TMCH const& mchTrack, TMFTs const& mftTracks)
   {
+    if (!mchTrack.has_mcParticle()) {
+      return false;
+    }
     const auto& mchMcParticle = mchTrack.mcParticle();
 
     const auto& mchMotherParticles = mchMcParticle.template mothers_as<aod::McParticles>();
@@ -542,8 +564,9 @@ struct mftMchMatcher {
     // search for an MFT track that is associated to the MCH mother particle
     for (const auto& mftTrack : mftTracks) {
       // skip tracks that do not have an associated MC particle
-      if (!mftTrack.has_mcParticle())
+      if (!mftTrack.has_mcParticle()) {
         continue;
+      }
 
       if (mftTrack.mcParticle().globalIndex() == mchMotherParticle.globalIndex()) {
         return true;
@@ -560,7 +583,6 @@ struct mftMchMatcher {
                              const std::vector<std::pair<int64_t, int64_t>>& matchablePairs,
                              bool isBestMatch)
   {
-    bool verbose{false};
     MuonMatchType result{kMatchTypeUndefined};
 
     if (static_cast<int>(muonTrack.trackType()) > 2) {
@@ -570,20 +592,9 @@ struct mftMchMatcher {
     auto const& mchTrack = muonTrack.template matchMCHTrack_as<TMUONS>();
     auto const& mftTrack = muonTrack.template matchMFTTrack_as<TMFTS>();
 
-    if (mchTrack.globalIndex() == 229 && muonTrack.globalIndex() == 230) verbose = true;
-
-    if (!mchTrack.has_mcParticle() || !mftTrack.has_mcParticle()) {
-      // if either the MCH or the MFT tracks are fakes (not associated to any MC particles)
-      // we consider the match as fake
-      if (verbose) std::cout << "[TOTO] MFT or MCH has no MC particle" << std::endl;
-      return (isBestMatch ? kMatchTypeFakeLeading : kMatchTypeFakeNonLeading);
-    }
-
     bool isPaired = isPairedMuon(mchTrack.globalIndex(), matchablePairs);
     std::pair<int64_t, int64_t> matchPair{mchTrack.globalIndex(), mftTrack.globalIndex()};
     bool isTrueMatch = std::find(matchablePairs.begin(), matchablePairs.end(), matchPair) != matchablePairs.end();
-
-    if (verbose) std::cout << std::format("[TOTO] isBestMatch={}  isPaired={}  isTrueMatch={}  isDecay={}", isBestMatch, isPaired, isTrueMatch, isDecay(mchTrack, mftTracks)) << std::endl;
 
     if (isPaired) {
       if (isTrueMatch) {
@@ -599,14 +610,50 @@ struct mftMchMatcher {
 
     return result;
   }
+  template <class EVT, class BC, class TMUON, class TMFTS>
+  int getMftMchMatchAttempts(EVT const& collisions,
+                             BC const& bcs,
+                             TMUON const& mchTrack,
+                             TMFTS const& mftTracks)
+  {
+    if (!mchTrack.has_collision()) {
+      return 0;
+    }
+    const auto& collMch = collisions.rawIteratorAt(mchTrack.collisionId());
+    const auto& bcMch = bcs.rawIteratorAt(collMch.bcId());
+
+    int attempts{0};
+    for (const auto& mftTrack : mftTracks) {
+      if (!mftTrack.has_collision()) {
+        continue;
+      }
+
+      const auto& collMft = collisions.rawIteratorAt(mftTrack.collisionId());
+      const auto& bcMft = bcs.rawIteratorAt(collMft.bcId());
+
+      int64_t deltaBc = static_cast<int64_t>(bcMft.globalBC()) - static_cast<int64_t>(bcMch.globalBC());
+      double deltaBcNS = o2::constants::lhc::LHCBunchSpacingNS * deltaBc;
+      double deltaTrackTime = mftTrack.trackTime() - mchTrack.trackTime() + deltaBcNS;
+      double trackTimeResTot = mftTrack.trackTimeRes() + mchTrack.trackTimeRes();
+
+      if (std::fabs(deltaTrackTime) > trackTimeResTot) {
+        continue;
+      }
+      attempts += 1;
+    }
+
+    return attempts;
+  }
 
   template <bool isMc, class TCOLLS, class TBCS, class TMUONS, class TMFTS, class TCOVS>
   void fillTable(TCOLLS const& collisions,
-                 TBCS const& /*bcs*/,
+                 TBCS const& bcs,
                  TMUONS const& muonTracks,
                  TMFTS const& mftTracks,
                  TCOVS const& mftCovs)
   {
+    std::unordered_map<int64_t, int> matchAttemptsMap;
+
     static std::ofstream mlout("mlout-training.txt");
     static int trackId = 0;
 
@@ -633,11 +680,11 @@ struct mftMchMatcher {
     }
 
     mftCovIndexes.clear();
-    for (auto& mftTrackCov : mftCovs) {
+    for (const auto& mftTrackCov : mftCovs) {
       mftCovIndexes[mftTrackCov.matchMFTTrackId()] = mftTrackCov.globalIndex();
     }
 
-    for (auto muon : muonTracks) {
+    for (const auto& muon : muonTracks) {
       // only consider global MFT-MCH-MID matches
       if (static_cast<int>(muon.trackType()) != 0) {
         continue;
@@ -664,7 +711,12 @@ struct mftMchMatcher {
       auto mftTime = mfttrack.trackTime() + bc_coll.globalBC() * o2::constants::lhc::LHCBunchSpacingNS;
 
       o2::track::TrackParCovFwd mftprop = VarManager::FwdToTrackPar(mfttrack, mfttrackcov);
-      o2::track::TrackParCovFwd muonprop = VarManager::FwdToTrackPar(muontrack, muontrack);
+      //o2::track::TrackParCovFwd muonprop = VarManager::FwdToTrackPar(muontrack, muontrack);
+      o2::dataformats::GlobalFwdTrack muonprop = trackToGlobalFwd(muontrack, muontrack);
+      //o2::dataformats::GlobalFwdTrack mftprop = fwdToTrackPar(mfttrack, mfttrackcov);
+      //o2::dataformats::GlobalFwdTrack muonprop = fwdToTrackPar(muontrack, muontrack);
+      //o2::track::TrackParCovFwd mftprop = (fzMatching.value < 0.) ? VarManager::PropagateFwd(mfttrack, mfttrackcov, fzMatching.value) : VarManager::FwdToTrackPar(mfttrack, mfttrackcov);
+      //o2::dataformats::GlobalFwdTrack muonprop = (fzMatching.value < 0.) ? VarManager::PropagateMuon(muontrack, collision, VarManager::kToMatching) : VarManager::FwdToTrackPar(muontrack, muontrack);
       if (fzMatching.value < 0.) {
         mftprop = VarManager::PropagateFwd(mfttrack, mfttrackcov, fzMatching.value);
         muonprop = VarManager::PropagateMuon(muontrack, collision, VarManager::kToMatching);
@@ -684,6 +736,14 @@ struct mftMchMatcher {
 
       bool IsAmbig = (muon.compatibleCollIds().size() != 1);
       int MFTMult = collision.mftNtracks();
+      int matchAttempts = 0;
+      auto matchAttemptsIt = matchAttemptsMap.find(muontrack.globalIndex());
+      if (matchAttemptsIt == matchAttemptsMap.end()) {
+        matchAttempts = getMftMchMatchAttempts(collisions, bcs, muontrack, mftTracks);
+        matchAttemptsMap.insert(std::make_pair(static_cast<int64_t>(muontrack.globalIndex()), matchAttempts));
+      } else {
+        matchAttempts = matchAttemptsIt->second;
+      }
 
       auto matchType = kMatchTypeUndefined;
       if constexpr (isMc) {
@@ -712,32 +772,32 @@ struct mftMchMatcher {
 
       float matchTypeSamplingFraction = 1.0;
       switch (matchType) {
-      case kMatchTypeTrueLeading:
-        matchTypeSamplingFraction = fSamplingFractionTrueLeadingMatches;
-        break;
-      case kMatchTypeTrueNonLeading:
-        matchTypeSamplingFraction = fSamplingFractionTrueNonLeadingMatches;
-        break;
-      case kMatchTypeWrongLeading:
-        matchTypeSamplingFraction = fSamplingFractionWrongLeadingMatches;
-        break;
-      case kMatchTypeWrongNonLeading:
-        matchTypeSamplingFraction = fSamplingFractionWrongNonLeadingMatches;
-        break;
-      case kMatchTypeDecayLeading:
-        matchTypeSamplingFraction = fSamplingFractionDecayLeadingMatches;
-        break;
-      case kMatchTypeDecayNonLeading:
-        matchTypeSamplingFraction = fSamplingFractionDecayNonLeadingMatches;
-        break;
-      case kMatchTypeFakeLeading:
-        matchTypeSamplingFraction = fSamplingFractionFakeLeadingMatches;
-        break;
-      case kMatchTypeFakeNonLeading:
-        matchTypeSamplingFraction = fSamplingFractionFakeNonLeadingMatches;
-        break;
-      default:
-        break;
+        case kMatchTypeTrueLeading:
+          matchTypeSamplingFraction = fSamplingFractionTrueLeadingMatches;
+          break;
+        case kMatchTypeTrueNonLeading:
+          matchTypeSamplingFraction = fSamplingFractionTrueNonLeadingMatches;
+          break;
+        case kMatchTypeWrongLeading:
+          matchTypeSamplingFraction = fSamplingFractionWrongLeadingMatches;
+          break;
+        case kMatchTypeWrongNonLeading:
+          matchTypeSamplingFraction = fSamplingFractionWrongNonLeadingMatches;
+          break;
+        case kMatchTypeDecayLeading:
+          matchTypeSamplingFraction = fSamplingFractionDecayLeadingMatches;
+          break;
+        case kMatchTypeDecayNonLeading:
+          matchTypeSamplingFraction = fSamplingFractionDecayNonLeadingMatches;
+          break;
+        case kMatchTypeFakeLeading:
+          matchTypeSamplingFraction = fSamplingFractionFakeLeadingMatches;
+          break;
+        case kMatchTypeFakeNonLeading:
+          matchTypeSamplingFraction = fSamplingFractionFakeNonLeadingMatches;
+          break;
+        default:
+          break;
       }
 
       if (matchTypeSamplingFraction < 1.0) {
@@ -806,6 +866,7 @@ struct mftMchMatcher {
         muon.fwdDcaY(),
         IsAmbig,
         MFTMult,
+        matchAttempts,
         mcMaskMuon,
         mcMaskMft,
         ncMaskGlob,
@@ -850,8 +911,8 @@ struct mftMchMatcher {
   PROCESS_SWITCH(mftMchMatcher, processRD, "process_RD", false);
 };
 
-WorkflowSpec defineDataProcessing(ConfigContext const& cfgc)
+WorkflowSpec defineDataProcessing(ConfigContext const& context)
 {
   return WorkflowSpec{
-    adaptAnalysisTask<mftMchMatcher>(cfgc)};
+    adaptAnalysisTask<mftMchMatcher>(context)};
 };
