@@ -215,9 +215,9 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     Configurable<std::string> cfgHistMftDcaTxAxis{"cfgHistMftDcaTxAxis", "", "Track x axis configuration for MFT DCA histograms"};
     Configurable<std::string> cfgHistMftDcaTyAxis{"cfgHistMftDcaTyAxis", "", "Track y axis configuration for MFT DCA histograms"};
     Configurable<std::string> cfgHistMftDcaNclusAxis{"cfgHistMftDcaNclusAxis", "", "Clusters axis configuration for MFT DCA histograms"};
+    Configurable<bool> cfgHistMftDcaEnableDetailedVzAnalysis{"cfgHistMftDcaEnableDetailedVzAnalysis", false, ""};
     Configurable<std::string> cfgHistDimuonLxyAxis{"cfgHistDimuonLxyAxis", "", "Di-muon Lxy axis configuration"};
     Configurable<std::string> cfgHistDimuonLzAxis{"cfgHistDimuonLzAxis", "", "Di-muon Lz axis configuration"};
-    Configurable<bool> cfgHistMftDcaEnableDetailedVzAnalysis{"cfgHistMftDcaEnableDetailedVzAnalysis", false, ""};
   } configHistograms;
 
   Configurable<bool> cfgRequireGoodRCT{"cfgRequireGoodRCT", true, "Require good detector flags in Run Condition Table"};
@@ -482,11 +482,12 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     AxisSpec dcayMFTAxis = {400, -0.5, 0.5, "DCA_{y} (cm)"};
     AxisSpec dcaxMCHAxis = {400, -10.0, 10.0, "DCA_{x} (cm)"};
     AxisSpec dcayMCHAxis = {400, -10.0, 10.0, "DCA_{y} (cm)"};
-    //auto dcazAxisConfig = getAxisConfiguration(configHistograms.cfgHistMftDcaVzAxis, 20, -10., 10.);
-    //AxisSpec dcazAxis = {std::get<0>(dcazAxisConfig), std::get<1>(dcazAxisConfig), std::get<2>(dcazAxisConfig), "v_{z} (cm)"};
-    AxisSpec dcazAxis = {20, -10., 10., "v_{z} (cm)"};
-    AxisSpec txAxis = {30 * 4, -mftLadderWidth * 15.f / 2.f, mftLadderWidth * 15.f / 2.f, "track_{x} (cm)"};
-    AxisSpec tyAxis = {24 * 4, -12.f, 12.f, "track_{y} (cm)"};
+    auto dcaVzAxisConfig = getAxisConfiguration(configHistograms.cfgHistMftDcaVzAxis, 20, -10., 10.);
+    AxisSpec dcaVzAxis = {std::get<0>(dcaVzAxisConfig), std::get<1>(dcaVzAxisConfig), std::get<2>(dcaVzAxisConfig), "v_{z} (cm)"};
+    auto txAxisConfig = getAxisConfiguration(configHistograms.cfgHistMftDcaTxAxis, 30 * 4, -mftLadderWidth * 15.f / 2.f, mftLadderWidth * 15.f / 2.f);
+    AxisSpec txAxis = {std::get<0>(txAxisConfig), std::get<1>(txAxisConfig), std::get<2>(txAxisConfig), "track_{x} (cm)"};
+    auto tyAxisConfig = getAxisConfiguration(configHistograms.cfgHistMftDcaTyAxis, 24 * 4, -12.f, 12.f);
+    AxisSpec tyAxis = {std::get<0>(tyAxisConfig), std::get<1>(tyAxisConfig), std::get<2>(tyAxisConfig), "track_{y} (cm)"};
     AxisSpec txCoarseAxis = {2, -mftLadderWidth * 15.f / 2.f, mftLadderWidth * 15.f / 2.f, "track_{x} (cm)"};
     AxisSpec tyCoarseAxis = {2, -12.f, 12.f, "track_{y} (cm)"};
     AxisSpec txFineAxis = {1500, -15.f, 15.f, "track_{x} (cm)"};
@@ -527,18 +528,18 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     if (cfgEnableMftDcaAnalysis) {
       if (configHistograms.cfgHistMftDcaEnableDetailedVzAnalysis) {
         registry.add("DCA/MFT/DCA_x", "DCA(x) vs. vz, tx, ty, nclus",
-                     HistType::kTHnSparseF, {dcaxMFTAxis, dcazAxis, txAxis, tyAxis, nMftClustersAxis});
+                     HistType::kTHnSparseF, {dcaxMFTAxis, dcaVzAxis, txAxis, tyAxis, nMftClustersAxis});
         registry.add("DCA/MFT/DCA_y", "DCA(y) vs. vz, tx, ty, nclus",
-                     HistType::kTHnSparseF, {dcayMFTAxis, dcazAxis, txAxis, tyAxis, nMftClustersAxis});
+                     HistType::kTHnSparseF, {dcayMFTAxis, dcaVzAxis, txAxis, tyAxis, nMftClustersAxis});
       } else {
         registry.add("DCA/MFT/DCA_x", "DCA(x) vs. vz, tx, ty, nclus",
                      HistType::kTHnSparseF, {dcaxMFTAxis, {1, -10., 10., "v_{z} (cm)"}, txAxis, tyAxis, nMftClustersAxis});
         registry.add("DCA/MFT/DCA_y", "DCA(y) vs. vz, tx, ty, nclus",
                      HistType::kTHnSparseF, {dcayMFTAxis, {1, -10., 10., "v_{z} (cm)"}, txAxis, tyAxis, nMftClustersAxis});
         registry.add("DCA/MFT/DCAxVsVz", "DCA(x) vs. vz",
-                     HistType::kTHnSparseF, {dcaxMFTAxis, dcazAxis, txCoarseAxis, tyCoarseAxis, nMftClustersAxis});
+                     HistType::kTHnSparseF, {dcaxMFTAxis, dcaVzAxis, txCoarseAxis, tyCoarseAxis, nMftClustersAxis});
         registry.add("DCA/MFT/DCAyVsVz", "DCA(y) vs. vz",
-                     HistType::kTHnSparseF, {dcayMFTAxis, dcazAxis, txCoarseAxis, tyCoarseAxis, nMftClustersAxis});
+                     HistType::kTHnSparseF, {dcayMFTAxis, dcaVzAxis, txCoarseAxis, tyCoarseAxis, nMftClustersAxis});
       }
 
       if (cfgEnableMftDcaExtraPlots) {
@@ -563,9 +564,9 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
     if (cfgEnableGlobalFwdDcaAnalysis) {
       registry.add("DCA/GlobalFwd/DCA_x", "DCA(x) vs. vz, tx, ty, nclus",
-                   HistType::kTHnSparseF, {dcaxMFTAxis, dcazAxis, txAxis, tyAxis, nMftClustersAxis});
+                   HistType::kTHnSparseF, {dcaxMFTAxis, dcaVzAxis, txAxis, tyAxis, nMftClustersAxis});
       registry.add("DCA/GlobalFwd/DCA_y", "DCA(y) vs. vz, tx, ty, nclus",
-                   HistType::kTHnSparseF, {dcayMFTAxis, dcazAxis, txAxis, tyAxis, nMftClustersAxis});
+                   HistType::kTHnSparseF, {dcayMFTAxis, dcaVzAxis, txAxis, tyAxis, nMftClustersAxis});
     }
 
     if (cfgEnableMftMchResidualsAnalysis) {
@@ -616,8 +617,8 @@ struct muonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                    {HistType::kTH2F, {{5000, 500, 1000, "cluster z (cm)"}, {16, 0, static_cast<double>(16), "DE"}}});
 
       if (cfgEnableMftMchResidualsExtraPlots) {
-        registry.add("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_vz", std::format("DCA(x) vs. vz, quadrant, chargeSign").c_str(), {HistType::kTHnSparseF, {dcazAxis, {4, 0, 4, "quadrant"}, {2, 0, 2, "sign"}, dcaxMCHAxis}});
-        registry.add("DCA/MCH/DCA_y_vs_sign_vs_quadrant_vs_vz", std::format("DCA(y) vs. vz, quadrant, chargeSign").c_str(), {HistType::kTHnSparseF, {dcazAxis, {4, 0, 4, "quadrant"}, {2, 0, 2, "sign"}, dcayMCHAxis}});
+        registry.add("DCA/MCH/DCA_x_vs_sign_vs_quadrant_vs_vz", std::format("DCA(x) vs. vz, quadrant, chargeSign").c_str(), {HistType::kTHnSparseF, {dcaVzAxis, {4, 0, 4, "quadrant"}, {2, 0, 2, "sign"}, dcaxMCHAxis}});
+        registry.add("DCA/MCH/DCA_y_vs_sign_vs_quadrant_vs_vz", std::format("DCA(y) vs. vz, quadrant, chargeSign").c_str(), {HistType::kTHnSparseF, {dcaVzAxis, {4, 0, 4, "quadrant"}, {2, 0, 2, "sign"}, dcayMCHAxis}});
 
         registry.add("residuals/dphi_at_mft", "Track #Delta#phi at MFT",
                      {HistType::kTHnSparseF, {{200, -0.2f, 0.2f, "#Delta#phi"}, {80, -10.f, 10.f, "track_x (cm)"}, {80, -10.f, 10.f, "track_y (cm)"}, {2, 0, 2, "sign"}, {20, 0, 100.0, "p (GeV/c)"}}});
