@@ -19,11 +19,9 @@
 #include "Common/CCDB/RCTSelectionFlags.h"
 #include "Common/Core/RecoDecay.h"
 #include "Common/Core/fwdtrackUtilities.h"
+#include "Common/DataModel/CollisionAssociationTables.h"
 #include "Common/DataModel/EventSelection.h"
 #include "Common/DataModel/TrackSelectionTables.h"
-#include "Common/DataModel/FwdTrackReAlignTables.h"
-
-#include "Common/DataModel/CollisionAssociationTables.h"
 
 #include <CCDB/BasicCCDBManager.h>
 #include <CCDB/CcdbApi.h>
@@ -126,7 +124,8 @@ using o2::track::TrackParCovFwd;
 namespace muonaligncoll
 {
 DECLARE_SOA_COLUMN(RunNumber, runNumber, int);
-DECLARE_SOA_COLUMN(Timestamp, timestamp, uint64_t); //! Timestamp of a BC in ms (epoch style)
+DECLARE_SOA_COLUMN(GlobalBC, globalBC, uint64_t);              //! Bunch crossing number (globally unique in this run)
+DECLARE_SOA_COLUMN(Timestamp, timestamp, uint64_t);            //! Timestamp of a BC in ms (epoch style)
 DECLARE_SOA_COLUMN(CollisionTime, collisionTime, float);       //! Collision time in ns relative to BC stored in bc()
 DECLARE_SOA_COLUMN(CollisionTimeRes, collisionTimeRes, float); //! Resolution of collision time
 } // namespace muonaligncoll
@@ -135,7 +134,8 @@ namespace o2::aod
 {
 // Reduced collisions table
 DECLARE_SOA_TABLE(MACollisions, "AOD", "MACOLL", //! Time and vertex information of collision
-                  o2::soa::Index<>, muonaligncoll::RunNumber, muonaligncoll::Timestamp,
+                  o2::soa::Index<>, muonaligncoll::RunNumber,
+                  muonaligncoll::GlobalBC, muonaligncoll::Timestamp,
                   collision::PosX, collision::PosY, collision::PosZ,
                   collision::CovXX, collision::CovYY, collision::CovZZ,
                   collision::CollisionTime, collision::CollisionTimeRes);
@@ -173,6 +173,10 @@ DECLARE_SOA_INDEX_COLUMN_FULL_CUSTOM(Collision, collision, int32_t, MACollisions
 DECLARE_SOA_SELF_INDEX_COLUMN_FULL(MAMCHTrack, matchMCHTrack, int, "MAFWDTRACKs_MatchMCHTrack"); // o2-linter: disable=name/o2-column (to match naming in official tables)
 // ID of matching MFT track for GlobalMuonTracks and GlobalForwardTracks
 DECLARE_SOA_INDEX_COLUMN_FULL_CUSTOM(MAMFTTrack, matchMFTTrack, int32_t, MAMFTTracks, "MAMFTTRKs", ""); // o2-linter: disable=name/o2-column (to match naming in official tables)
+// Track time information
+DECLARE_SOA_COLUMN(GlobalBC, globalBC, uint64_t);      //! Bunch crossing number (globally unique in this run)
+DECLARE_SOA_COLUMN(TrackTime, trackTime, float);       //! Estimated time of the track in ns wrt collision().bc() or ambiguoustrack.bcSlice()[0]
+DECLARE_SOA_COLUMN(TrackTimeRes, trackTimeRes, float); //! Resolution of the track time in ns
 } // namespace muonalignfwdtrk
 
 namespace o2::aod
@@ -186,6 +190,8 @@ DECLARE_SOA_TABLE(StoredMAFwdTracks, "AOD", "MAFWDTRACK",
                   fwdtrack::Py<fwdtrack::Pt, fwdtrack::Phi>,
                   fwdtrack::Pz<fwdtrack::Pt, fwdtrack::Tgl>,
                   fwdtrack::Sign<fwdtrack::Signed1Pt>,
+                  muonalignfwdtrk::GlobalBC,
+                  muonalignfwdtrk::TrackTime, muonalignfwdtrk::TrackTimeRes,
                   fwdtrack::Chi2, fwdtrack::Chi2MatchMCHMFT,
                   muonalignfwdtrk::MAMFTTrackId, muonalignfwdtrk::MAMCHTrackId);
 
@@ -249,10 +255,9 @@ namespace o2::aod
 
 namespace ma_track_association
 {
-DECLARE_SOA_INDEX_COLUMN(Collision, collision);            //! Collision index
-//DECLARE_SOA_INDEX_COLUMN_FULL_CUSTOM(FwdTrack, fwdTrack, int32_t, MAFwdTracks, "MAFwdTracks", "");
-DECLARE_SOA_ARRAY_INDEX_COLUMN(Collision, compatibleColl); //! Array of collision indices
-} // namespace track_association
+DECLARE_SOA_INDEX_COLUMN_FULL_CUSTOM(Collision, collision, int32_t, MACollisions, "MACOLLs", "");            //! Collision index
+DECLARE_SOA_ARRAY_INDEX_COLUMN_FULL_CUSTOM(Collision, compatibleColl, int32_t, MACollisions, "MACOLLs", ""); //! Array of collision indices
+} // namespace ma_track_association
 
 DECLARE_SOA_TABLE(MAFwdTrackAssoc, "AOD", "MAFWDTRACKASSOC", //! Table for fwdtrack-to-collision association
                   ma_track_association::CollisionId,
@@ -278,7 +283,7 @@ using CompactMFTTrack = CompactMFTTracks::iterator;
 // Switch to enable/disable the processing of the derived tables
 // 0: process standard AO2Ds and produce the derived tables
 // 1: process derived AO2Ds and disable the derived tables creation
-#define PROCESS_DERIVED_TABLES 0
+#define PROCESS_DERIVED_TABLES 1 // NOLINT(cppcoreguidelines-macro-usage)
 
 struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struct (exception)
 
@@ -316,7 +321,6 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
   ////   Variables for selecting MCH and MFT tracks
   Configurable<float> cfgTrackChi2MchUp{"cfgTrackChi2MchUp", 5.f, ""};
-  //Configurable<float> cfgMftMchResidualsPtLow{"cfgPtMchLow", 0.7f, ""};
   Configurable<float> cfgEtaMchLow{"cfgEtaMchLow", -4.0f, ""};
   Configurable<float> cfgEtaMchUp{"cfgEtaMchUp", -2.5f, ""};
   Configurable<float> cfgEtaMftLow{"cfgEtaMftLow", -3.6f, ""};
@@ -525,6 +529,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
   struct CollisionInfo {
     int runNumber{0};
+    uint64_t globalBC{0};
     uint64_t timestamp{0};
     // z position of the collision
     double zVertex{0};
@@ -540,9 +545,9 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     std::unordered_map<uint64_t, int32_t> muonTracksCollMult;
   };
 
-  // vector of MCH(-MID) track indexes
+  // global vector of MCH(-MID) track indexes
   std::vector<uint64_t> mMchTracks;
-  // matching candidates
+  // global vector of matching candidates
   std::unordered_map<uint64_t, std::vector<uint64_t>> mGlobalMuonTracks;
 
   std::tuple<int, double, double> getAxisConfiguration(std::string cfgStr, int nBinsDef, double xMinDef, double xMaxDef)
@@ -664,7 +669,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           .z = it->value["z"].GetDouble()};
       }
     } else {
-      LOG(error) << "JSON parse error: " << rapidjson::GetParseErrorFunc(jsonOk.Code()) << " (" << jsonOk.Offset() << ")";
+      LOG(error) << "JSON parse error: " << rapidjson::GetParseErrorFunc(jsonOk.Code()) << " (" << jsonOk.Offset() << ")"; // NOLINT(google-readability-casting)
     }
 
     // two-prong track fitter setup
@@ -706,6 +711,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
     registry.add("collision_mult", std::format("Collision multiplicity").c_str(), {HistType::kTH2F, {{10, 0, 10, "multiplicity"}, {10, 0, 10, "track type"}}});
     registry.add("collision_dz", std::format("Collision #Deltaz").c_str(), {HistType::kTH2F, {{1000, 0, 10, "#Deltaz (cm)"}, {10, 0, 10, "track type"}}});
+    registry.add("collision_dt_vs_dz", std::format("Collision #Deltaz").c_str(), {HistType::kTH2F, {{1000, 0, 10, "#Deltaz (cm)"}, {100, 0, 1000, "#Deltat (ns)"}}});
     registry.add("collision_timeres", std::format("Collision time res.").c_str(), {HistType::kTH2F, {{100, 0, 500, "time res. (ns)"}, {10, 0, 10, "track type"}}});
     registry.add("collision_timeres_min", std::format("Collision time res. min").c_str(), {HistType::kTH2F, {{100, 0, 500, "time res. (ns)"}, {10, 0, 10, "track type"}}});
 
@@ -1708,100 +1714,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
     return propmuon;
   }
-/*
-  template <class TMFT, class C>
-  o2::dataformats::GlobalFwdTrack PropagateMFTToDCA(const TMFT& mftTrack, const C& collision, float zshift)
-  {
-    // static double Bz = -10001;
-    double chi2 = mftTrack.chi2();
-    double phiCorrDeg = 0;
-    double phiCorr = phiCorrDeg * o2::constants::math::Deg2Rad;
-    double tR = std::hypot(mftTrack.x(), mftTrack.y());
-    double tphi = std::atan2(mftTrack.y(), mftTrack.x());
-    double tx = std::cos(tphi + phiCorr) * tR;
-    double ty = std::sin(tphi + phiCorr) * tR;
-    SMatrix5 tpars = {tx, ty, mftTrack.phi() + phiCorr, mftTrack.tgl(), mftTrack.signed1Pt()};
-    std::vector<double> v1{0, 0, 0, 0, 0,
-                           0, 0, 0, 0, 0,
-                           0, 0, 0, 0, 0};
-    SMatrix55 tcovs(v1.begin(), v1.end());
-    o2::track::TrackParCovFwd fwdtrack{mftTrack.z(), tpars, tcovs, chi2};
-    if (configMFTAlignmentCorrections.cfgEnableMFTAlignmentCorrections) {
-      TransformMFT(fwdtrack);
-    }
-    o2::dataformats::GlobalFwdTrack propmuon;
 
-    // double propVec[3] = {};
-    // propVec[0] = collision.posX() - mftTrack.x();
-    // propVec[1] = collision.posY() - mftTrack.y();
-    // propVec[2] = collision.posZ() - mftTrack.z();
-
-    // double centerZ[3] = {mftTrack.x() + propVec[0] / 2.,
-    //                      mftTrack.y() + propVec[1] / 2.,
-    //                      mftTrack.z() + propVec[2] / 2.};
-    // if (Bz < -10000) {
-    //  double centerZ[3] = {0, 0, -45.f / 2.f};
-    //  o2::field::MagneticField* field = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField());
-    //  Bz = field->getBz(centerZ);
-    // }
-    fwdtrack.propagateToZ(collision.posZ() - zshift, mBzAtMftCenter);
-
-    propmuon.setParameters(fwdtrack.getParameters());
-    propmuon.setZ(fwdtrack.getZ());
-    propmuon.setCovariances(fwdtrack.getCovariances());
-
-    return propmuon;
-  }
-
-  template <class TMFT, class TMUON, class C>
-  o2::dataformats::GlobalFwdTrack PropagateMFTToDCA(const TMFT& mftTrack, const TMUON& mchTrack, const C& collision, float zshift)
-  {
-    // static double Bz = -10001;
-    double chi2 = mftTrack.chi2();
-    double phiCorrDeg = 0;
-    double phiCorr = phiCorrDeg * o2::constants::math::Deg2Rad;
-    double tR = std::hypot(mftTrack.x(), mftTrack.y());
-    double tphi = std::atan2(mftTrack.y(), mftTrack.x());
-    double tx = std::cos(tphi + phiCorr) * tR;
-    double ty = std::sin(tphi + phiCorr) * tR;
-    SMatrix5 tpars = {tx, ty, mftTrack.phi() + phiCorr, mftTrack.tgl(), mftTrack.signed1Pt()};
-    std::vector<double> v1{0, 0, 0, 0, 0,
-                           0, 0, 0, 0, 0,
-                           0, 0, 0, 0, 0};
-    SMatrix55 tcovs(v1.begin(), v1.end());
-    o2::track::TrackParCovFwd fwdtrack{mftTrack.z(), tpars, tcovs, chi2};
-    if (configMFTAlignmentCorrections.cfgEnableMFTAlignmentCorrections) {
-      TransformMFT(fwdtrack);
-    }
-
-    // extrapolation with MCH tools
-    auto mchTrackAtMFT = FwdtoMCH(TrackToGlobalFwd(mchTrack));
-    o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrackAtMFT, mftTrack.z());
-    UpdateTrackMomentum(fwdtrack, mchTrackAtMFT);
-
-    // double propVec[3] = {};
-    // propVec[0] = collision.posX() - mftTrack.x();
-    // propVec[1] = collision.posY() - mftTrack.y();
-    // propVec[2] = collision.posZ() - mftTrack.z();
-
-    // double centerZ[3] = {mftTrack.x() + propVec[0] / 2.,
-    //                      mftTrack.y() + propVec[1] / 2.,
-    //                      mftTrack.z() + propVec[2] / 2.};
-    // if (Bz < -10000) {
-    //  double centerZ[3] = {0, 0, -45.f / 2.f};
-    //  o2::field::MagneticField* field = static_cast<o2::field::MagneticField*>(TGeoGlobalMagField::Instance()->GetField());
-    //  Bz = field->getBz(centerZ);
-    // }
-    fwdtrack.propagateToZ(collision.posZ() - zshift, mBzAtMftCenter);
-
-    o2::dataformats::GlobalFwdTrack propmuon;
-    propmuon.setParameters(fwdtrack.getParameters());
-    propmuon.setZ(fwdtrack.getZ());
-    propmuon.setCovariances(fwdtrack.getCovariances());
-
-    return propmuon;
-  }
-*/
   template <class C>
   o2::dataformats::GlobalFwdTrack PropagateMFTToDCA(o2::track::TrackParCovFwd mftTrackPar,
                                                     const C& collision,
@@ -1928,46 +1841,6 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
     return MCHtoFwd(mftTrackProp);
   }
-/*
-  template <typename TMFT>
-  o2::dataformats::GlobalFwdTrack PropagateMFTtoMCH(const TMFT& mftTrack, const o2::mch::TrackParam& mchTrackPar, const double z)
-  {
-    // extrapolation with MCH tools
-    auto mchTrackAtMFT = mchTrackPar;
-    o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrackAtMFT, mftTrack.z());
-
-    auto mftTrackPar = TrackToGlobalFwd(mftTrack);
-    if (configMFTAlignmentCorrections.cfgEnableMFTAlignmentCorrections) {
-      TransformMFT(mftTrackPar);
-    }
-    auto mftTrackProp = FwdtoMCH(mftTrackPar);
-    UpdateTrackMomentum(mftTrackProp, mchTrackAtMFT);
-    if (z < AbsorberBackZ) {
-      o2::mch::TrackExtrap::extrapToZ(mftTrackProp, BransonPlaneZ);
-      UpdateTrackMomentum(mftTrackProp, mchTrackPar);
-    }
-
-    if (cfgDipoleZshift.value != 0) {
-      // extrapolate to the back of the absorber, taking into account the dipole shift,
-      // to avoid that the correction bring the track starting point back into the absorber
-      if (cfgDipoleZshift.value < 0) {
-        o2::mch::TrackExtrap::extrapToZ(mftTrackProp, AbsorberBackZ);
-      } else if (cfgDipoleZshift.value > 0) {
-        o2::mch::TrackExtrap::extrapToZ(mftTrackProp, AbsorberBackZ - cfgDipoleZshift.value);
-      }
-      // shift the track starting point
-      mftTrackProp.setZ(mftTrackProp.getZ() + cfgDipoleZshift.value);
-      // extrapolate to the final z, corrected for the dipole shift
-      o2::mch::TrackExtrap::extrapToZ(mftTrackProp, z + cfgDipoleZshift.value);
-      // remove the shift from the extrapolated track
-      mftTrackProp.setZ(mftTrackProp.getZ() - cfgDipoleZshift.value);
-    } else {
-      o2::mch::TrackExtrap::extrapToZ(mftTrackProp, z);
-    }
-
-    return MCHtoFwd(mftTrackProp);
-  }
-*/
 
   template <class C>
   o2::dataformats::GlobalFwdTrack PropagateMFTToVertex(const o2::track::TrackParCovFwd& mftTrackPar,
@@ -1995,46 +1868,6 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                                                                cfgRefPlaneZMFT,
                                                                mBzAtMftCenter);
 
-/*
-    auto mchTrackAtVertex = FwdtoMCH(mchTrackPar);
-    o2::mch::TrackExtrap::extrapToVertex(mchTrackAtVertex,
-                                         collision.posX(),
-                                         collision.posY(),
-                                         collision.posZ(),
-                                         std::sqrt(collision.covXX()),
-                                         std::sqrt(collision.covYY()));
-
-
-    auto fwdTrackAtVertexMch = FwdtoMCH(fwdTrackRefit);
-    o2::mch::TrackExtrap::extrapToVertex(fwdTrackAtVertexMch,
-                                         collision.posX(),
-                                         collision.posY(),
-                                         collision.posZ(),
-                                         std::sqrt(collision.covXX()),
-                                         std::sqrt(collision.covYY()));
-
-    auto fwdTrackPropAlt = fwdTrackRefit;
-    auto geoMan = o2::base::GeometryManager::meanMaterialBudget(fwdTrackProp.getX(), fwdTrackProp.getY(), fwdTrackProp.getZ(), collision.posX(), collision.posY(), collision.posZ());
-    auto x2x0 = static_cast<float>(geoMan.meanX2X0);
-    fwdTrackPropAlt.propagateToVtxhelixWithMCS(collision.posZ(), {collision.posX(), collision.posY()}, {collision.covXX(), collision.covYY()}, mBzAtMftCenter, x2x0);
-
-    std::cout << std::format("MCH track at MFT: p={} tanl={} phi={}",
-                             MCHtoFwd(mchTrackAtMFT).getP(),
-                             MCHtoFwd(mchTrackAtMFT).getTanl(),
-                             MCHtoFwd(mchTrackAtMFT).getPhi()) << std::endl;
-    std::cout << std::format("MCH track at vtx: p={} tanl={} phi={}",
-                             MCHtoFwd(mchTrackAtVertex).getP(),
-                             MCHtoFwd(mchTrackAtVertex).getTanl(),
-                             MCHtoFwd(mchTrackAtVertex).getPhi()) << std::endl;
-    std::cout << std::format("FWD track at vtx: p={} tanl={} phi={}",
-                             fwdTrackProp.getP(),
-                             fwdTrackProp.getTanl(),
-                             fwdTrackProp.getPhi()) << std::endl;
-    std::cout << std::format("ALT track at vtx: p={} tanl={} phi={}",
-                             fwdTrackPropAlt.getP(),
-                             fwdTrackPropAlt.getTanl(),
-                             fwdTrackPropAlt.getPhi()) << std::endl;
-*/
     return fwdTrackProp;
   }
 
@@ -2097,8 +1930,13 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                                                               const o2::track::TrackParCovFwd& track2,
                                                               const C& collision)
   {
-    auto progCode = fgFitterTwoProngFwd.process(track1, track2);
-
+    int progCode = -1;
+    try {
+      progCode = fgFitterTwoProngFwd.process(track1, track2);
+    } catch (const std::exception& e) {
+      LOGF(warning, "Two-prong fit failed: {}", e.what());
+      return {};
+    }
     if (progCode == 0) {
       return {};
     }
@@ -2204,8 +2042,8 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       trackParam.setZ(trackParam.getZ() - cfgDipoleZshift.value);
     }
 
-    auto& mchTrackParRealign = *(convertedTrack.begin());
     /*
+    auto& mchTrackParRealign = *(convertedTrack.begin());
     std::cout << "MCH track parameters after realignment:" << std::endl
         << std::format("  {:+0.6f} {:+0.6f} {:+0.6f} {:+0.6f} {:+0.6f}   p={:0.3f}  Q={}",
             mchTrackParRealign.getParameters()(0, 0),
@@ -2283,6 +2121,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
         auto& collisionInfo = collisionInfos[collisionIndex];
         collisionInfo.runNumber = bc.runNumber();
+        collisionInfo.globalBC = bc.globalBC();
         collisionInfo.timestamp = bc.timestamp();
         collisionInfo.zVertex = collision.posZ();
 
@@ -2431,6 +2270,10 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       //}
       //std::cout << std::format("[BABBO]   muonTrack.collisionId() = {}", muonTrack.collisionId()) << std::endl;
       uint32_t nCompatColl = 0;
+      if (!muonTrack.has_collision()) {
+        continue;
+      }
+      //auto collisionId = muonTrack.collisionId();
       for (const auto& collisionId : muonTrack.compatibleCollIds()) {
 
         auto collision = collisions.rawIteratorAt(collisionId);
@@ -2438,6 +2281,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
         auto& collisionInfo = collisionInfos[collisionIndex];
         collisionInfo.runNumber = collision.runNumber();
+        collisionInfo.globalBC = collision.globalBC();
         collisionInfo.timestamp = collision.timestamp();
         collisionInfo.zVertex = collision.posZ();
 
@@ -2495,14 +2339,14 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       }
 
       // store the number of compatible collisions for this track in all the corresponding CollisionInfo objects
-      for (const auto& collisionId : muonTrack.compatibleCollIds()) {
+      /*for (const auto& collisionId : muonTrack.compatibleCollIds()) {
         try {
           auto& collisionInfo = collisionInfos.at(collisionId);
           collisionInfo.muonTracksCollMult[muonTrack.globalIndex()] = nCompatColl;
         } catch (const std::exception& e) {
           continue;
         }
-      }
+      }*/
     }
 
     // sort the vectors of matching candidates in ascending order based on the matching chi2 value
@@ -2556,22 +2400,20 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
   }
 
 #if (PROCESS_DERIVED_TABLES == 0)
-  template <class COLL, class TMUON, class TCLS, class TMFT>
+  template <class COLL, class BC, class TMUON, class TCLS, class TMFT>
   void StoreCollisions(const std::unordered_map<uint64_t, CollisionInfo>& collisionInfos,
                        COLL const& collisions,
+                       BC const& bcs,
                        TMUON const& muonTracks,
                        TCLS const& clusters,
                        TMFT const& /*mftTracks*/,
-                       aod::FwdTrackAssoc const& fwdTrackAssocs,
-                       aod::FwdTrkCompColls const& fwdTrackCompColls)
+                       aod::FwdTrackAssoc const& fwdTrackAssocs)
   {
-    int32_t collId = 0;
-    //int32_t mchTrkId = 0;
-    int32_t fwdTrkId = 0;
-    int32_t mftTrkId = 0;
+    int32_t remappedCollisionIndex = 0;
+    int32_t remappedFwdTrkIndex = 0;
+    int32_t remappedMftTrkIndex = 0;
 
-    std::cout << "[StoreCollisions] called" << std::endl;
-
+    // remapping tables for collisions and tracks IDs
     std::unordered_map<int64_t, int32_t> collisionIdRemapping;
     std::unordered_map<int64_t, int32_t> muonTrackIdRemapping;
     std::vector<int64_t> muonTrackIdInverseMapping;
@@ -2589,11 +2431,13 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       std::cout << std::format("[MAMMA] Collision: x={:0.3f} y={:0.3f} z={:0.3f} id={}/{}",
           c.posX(), c.posY(), c.posZ(), collId, collisionIndex) << std::endl;
 
-      collTable(collisionInfo.runNumber, collisionInfo.timestamp,
+      collTable(collisionInfo.runNumber,
+                collisionInfo.globalBC,
+                collisionInfo.timestamp,
                 c.posX(), c.posY(), c.posZ(),
                 c.covXX(), c.covYY(), c.covZZ(),
                 c.collisionTime(), c.collisionTimeRes());
-      collisionIdRemapping[collisionIndex] = collId;
+      collisionIdRemapping[collisionIndex] = remappedCollisionIndex;
 
       bool hasGoodOppositeSignMuonPair = false;
       std::vector<MuonPair> muonPairs;
@@ -2652,6 +2496,13 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           continue;
         }
 
+        // skip tracks without associated collision (this should never be true here)
+        if (!mchTrack.has_collision()) {
+          continue;
+        }
+        const auto& trackColl = collisions.rawIteratorAt(mchTrack.collisionId());
+        const auto& trackBc = bcs.rawIteratorAt(trackColl.bcId());
+
         // store all MCH tracks when the event contains a muon pair of opposite sign
         if (!hasGoodOppositeSignMuonPair) {
           // only store good MCH tracks
@@ -2660,11 +2511,13 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           }
         }
 
-        fwdTable(collId,
+        fwdTable(remappedCollisionIndex,
                  mchTrack.trackType(),
                  mchTrack.x(), mchTrack.y(), mchTrack.z(),
                  mchTrack.phi(), mchTrack.tgl(), mchTrack.signed1Pt(),
                  mchTrack.nClusters(), mchTrack.pDca(), mchTrack.rAtAbsorberEnd(),
+                 trackBc.globalBC(),
+                 mchTrack.trackTime(), mchTrack.trackTimeRes(),
                  mchTrack.chi2(), mchTrack.chi2MatchMCHMFT(),
                  mchTrack.matchMFTTrackId(), mchTrack.matchMCHTrackId());
 
@@ -2675,18 +2528,17 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
         }
 
         // loop over attached clusters
-        //auto clustersSliced = clusters.sliceBy(perMuon, mchTrack.globalIndex()); // Slice clusters by muon id
         //std::cout << "[StoreCollisions] Getting clusters for MCH track #" << mchTrack.globalIndex() << std::endl;
         auto clustersSliced = clusters.sliceBy(perMuon, mchTrack.globalIndex()); // Slice clusters by muon id
         //std::cout << "[StoreCollisions] Found " << clustersSliced.size() << " clusters for MCH track #" << mchTrack.globalIndex() << std::endl;
         for (auto const& cluster : clustersSliced) {
-          clusTable(fwdTrkId, cluster.x(), cluster.y(), cluster.z(), cluster.clInfo());
+          clusTable(remappedFwdTrkIndex, cluster.x(), cluster.y(), cluster.z(), cluster.clInfo());
         }
 
-        muonTrackIdRemapping[mchTrack.globalIndex()] = fwdTrkId;
+        muonTrackIdRemapping[mchTrack.globalIndex()] = remappedFwdTrkIndex;
         muonTrackIdInverseMapping.push_back(mchTrack.globalIndex());
         collsPerTrack.emplace_back(std::make_unique<std::vector<int32_t>>());
-        fwdTrkId += 1;
+        remappedFwdTrkIndex += 1;
       }
 
       // loop over global muon tracks
@@ -2700,6 +2552,10 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           continue;
         }
 
+        // skip tracks without associated collision (this should never be true here)
+        if (!mchTrack.has_collision()) {
+          continue;
+        }
         try {
           auto remappedMchId = muonTrackIdRemapping.at(mchTrack.globalIndex());
 
@@ -2707,18 +2563,23 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           std::cout << std::format("[MAMMA]   MCH track: p={:0.3f} id={}/{}", mchTrack.p(), remappedMchId, mchTrack.globalIndex()) << std::endl;
           std::cout << std::format("[MAMMA]   MFT track: p={:0.3f} id={}/{}", mftTrack.p(), mftTrkId, mftTrack.globalIndex()) << std::endl;
 
-          mftTable(collId,
+          const auto& trackColl = collisions.rawIteratorAt(mchTrack.collisionId());
+          const auto& trackBc = bcs.rawIteratorAt(trackColl.bcId());
+
+          mftTable(remappedCollisionIndex,
                    mftTrack.x(), mftTrack.y(), mftTrack.z(),
                    mftTrack.phi(), mftTrack.tgl(), mftTrack.signed1Pt(),
                    mftTrack.mftClusterSizesAndTrackFlags(), mftTrack.chi2());
 
-          fwdTable(collId,
+          fwdTable(remappedCollisionIndex,
                    muonTrack.trackType(),
                    muonTrack.x(), muonTrack.y(), muonTrack.z(),
                    muonTrack.phi(), muonTrack.tgl(), muonTrack.signed1Pt(),
                    muonTrack.nClusters(), muonTrack.pDca(), muonTrack.rAtAbsorberEnd(),
+                   trackBc.globalBC(),
+                   mchTrack.trackTime(), mchTrack.trackTimeRes(),
                    muonTrack.chi2(), muonTrack.chi2MatchMCHMFT(),
-                   mftTrkId, remappedMchId);
+                   remappedMftTrkIndex, remappedMchId);
 
           if (cfgProduceMuonAlignmentTablesWithCovariances.value) {
             fwdCovTable(muonTrack.sigmaX(), muonTrack.sigmaY(), muonTrack.sigmaPhi(), muonTrack.sigmaTgl(), muonTrack.sigma1Pt(),
@@ -2726,17 +2587,17 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                         muonTrack.rhoTglPhi(), muonTrack.rho1PtX(), muonTrack.rho1PtY(), muonTrack.rho1PtPhi(), muonTrack.rho1PtTgl());
           }
 
-          muonTrackIdRemapping[muonTrack.globalIndex()] = fwdTrkId;
+          muonTrackIdRemapping[muonTrack.globalIndex()] = remappedFwdTrkIndex;
           muonTrackIdInverseMapping.push_back(muonTrack.globalIndex());
           collsPerTrack.emplace_back(std::make_unique<std::vector<int32_t>>());
-          fwdTrkId += 1;
-          mftTrkId += 1;
+          remappedFwdTrkIndex += 1;
+          remappedMftTrkIndex += 1;
         } catch (const std::exception& e) {
           continue;
         }
       }
 
-      collId += 1;
+      remappedCollisionIndex += 1;
     }
 
     // store track-to-collision associations
@@ -2754,7 +2615,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     }
 
     // store reverse track-to-collision associations
-    for (int32_t remappedTrackId = 0; remappedTrackId < collsPerTrack.size(); remappedTrackId++) {
+    for (uint32_t remappedTrackId = 0; remappedTrackId < collsPerTrack.size(); remappedTrackId++) {
       // step 1: fill vectors of remapped collision IDs for each of the tracks that is store in the derived tables
       auto& remappedCollsVec = collsPerTrack[remappedTrackId];
       const auto trackId = muonTrackIdInverseMapping[remappedTrackId];
@@ -2784,8 +2645,6 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                     TMFT const& mftTracks,
                     const std::unordered_map<uint64_t, CollisionInfo>& collisionInfos)
   {
-    std::cout << "[FillMftPlots] called" << std::endl;
-
     // outer loop over collisions
     for (const auto& [collisionIndex, collisionInfo] : collisionInfos) {
       auto const& collision = collisions.rawIteratorAt(collisionIndex);
@@ -3072,18 +2931,18 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
         // Residuals analysis between MFT tracks and MCH clusters
         if (cfgEnableMftMchResidualsAnalysis && (matchChi2 <= cfgMftMchResidualsMatchChi2Up.value)) {
-          if (!mchTrackParNew.isRemovable()) {
+          /*if (!mchTrackParNew.isRemovable()) {
             double xslope = FwdtoMCH(mftTrackParNew).getNonBendingSlope();
             double yslope = FwdtoMCH(mftTrackParNew).getBendingSlope();
             const auto mftTrackAtClusterWithCorr = PropagateMFTtoMCH(mftTrackParNew, FwdtoMCH(mchTrackParNew), 1500);
-            /*std::cout << std::format("[PIPPO] ts={} a MCH track: x={:+0.3f} y={:+0.3f} p={:0.3f}", collision.timestamp(), mchTrackParNew.getX(), mchTrackParNew.getY(), mchTrackParNew.getP()) << std::endl;
+            std::cout << std::format("[PIPPO] ts={} a MCH track: x={:+0.3f} y={:+0.3f} p={:0.3f}", collision.timestamp(), mchTrackParNew.getX(), mchTrackParNew.getY(), mchTrackParNew.getP()) << std::endl;
             std::cout << std::format("[PIPPO] ts={} b MFT track: x={:+0.3f} y={:+0.3f} phi={:+0.3f} tanl={:0.3f} xslope={:+0.5f} yslope={:+0.5f} p={:0.3f}",
                 collision.timestamp(), mftTrackParNew.getX(), mftTrackParNew.getY(),
                 mftTrackParNew.getPhi(), mftTrackParNew.getTgl(),
                 xslope, yslope,
                 mftTrackParNew.getP()) << std::endl;
-            std::cout << std::format("[PIPPO] ts={} c MFT track @1500cm: x={:+0.3f} y={:+0.3f}", collision.timestamp(), mftTrackAtClusterWithCorr.getX(), mftTrackAtClusterWithCorr.getY()) << std::endl;*/
-          }
+            std::cout << std::format("[PIPPO] ts={} c MFT track @1500cm: x={:+0.3f} y={:+0.3f}", collision.timestamp(), mftTrackAtClusterWithCorr.getX(), mftTrackAtClusterWithCorr.getY()) << std::endl;
+          }*/
           // loop over attached clusters
           auto clustersSliced = clusters.sliceBy(perMuon, mchTrack.globalIndex()); // Slice clusters by muon id
           for (auto const& cluster : clustersSliced) {
@@ -3293,6 +3152,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
     int quadrant1 = GetQuadrant(static_cast<float>(std::atan2(trackPar1.getY(), trackPar1.getX())));
     int quadrant2 = GetQuadrant(static_cast<float>(std::atan2(trackPar2.getY(), trackPar2.getX())));
 
+    std::cout << std::format("  Filling invmass plots with mass={:0.3f} p={:0.3f} pT={:0.3f} q1={} q2={}", mass, p, pT, quadrant1, quadrant2) << std::endl;
     registry.get<THnSparse>(histConfig)->Fill(mass, p, pT, quadrant1, quadrant2);
   }
 
@@ -3366,6 +3226,8 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
     double tauxy = 299792458.e-7 * 10. * decayLength->first * v12.M() / (v12.Pt() * o2::constants::physics::LightSpeedCm2NS);
     double tauz = 299792458.e-7 * 10. * decayLength->second * invMass / (TMath::Abs(v12.Pz()) * o2::constants::physics::LightSpeedCm2NS);
+
+    std::cout << std::format("  Filling ct plots with mass={:0.3f} p={:0.3f} pT={:0.3f} q1={} q2={}", invMass, p, pT, quadrant1, quadrant2) << std::endl;
 
     registry.get<THnSparse>(histConfigTauxy)->Fill(tauxy, invMass, p, pT, quadrant1, quadrant2);
     registry.get<THnSparse>(histConfigTauz)->Fill(tauz, invMass, p, pT, quadrant1, quadrant2);
@@ -3525,20 +3387,10 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
           double fwdAngle = getMuMuAngle(fwdTrackPar1AtVertex, fwdTrackPar2AtVertex);
           double fwdAngleNew = getMuMuAngle(fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex);
 
-          //double invMassMch = getMuMuInvariantMass(mchTrackPar1AtVertex, mchTrackPar2AtVertex);
-          //double invMassFwd = getMuMuInvariantMass(fwdTrackPar1AtVertex, fwdTrackPar2AtVertex);
-          //double invMassMchNew = getMuMuInvariantMass(mchTrackParNew1AtVertex, mchTrackParNew2AtVertex);
-          //double invMassFwdNew = getMuMuInvariantMass(fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex);
-
           fillDimuonAnglePlot(mchTrackPar1, mchTrackPar2, fwdTrackPar1AtVertex, fwdTrackPar2AtVertex, mchAngle, fwdAngle, HIST("dimuon/angle_GlobalMuonCuts_GoodMatches"));
           fillDimuonAnglePlot(mchTrackParNew1, mchTrackParNew2, fwdTrackParNew1AtVertex, fwdTrackParNew2AtVertex, mchAngleNew, fwdAngleNew, HIST("dimuon/realign/angle_GlobalMuonCuts_GoodMatches"));
 
-          //auto fwdTrackPar1 = MatchedTrackToParCovFwd(mchTrackPar1, mftTrackPar1);
-          //auto fwdTrackPar2 = MatchedTrackToParCovFwd(mchTrackPar2, mftTrackPar2);
-          //auto fwdTrackParNew1 = MatchedTrackToParCovFwd(mchTrackParNew1, mftTrackParNew1);
-          //auto fwdTrackParNew2 = MatchedTrackToParCovFwd(mchTrackParNew2, mftTrackParNew2);
-          //auto decayLength = getMuMuDecayLength(fwdTrackPar1, fwdTrackPar2, collision);
-
+          std::cout << "Calling fillDimuonDecayLengthPlots" << std::endl;
           fillDimuonDecayLengthPlots(MatchedTrackToParCovFwd(mchTrackPar1, mftTrackPar1),
                                      MatchedTrackToParCovFwd(mchTrackPar2, mftTrackPar2),
                                      fwdTrackPar1AtVertex,
@@ -3548,7 +3400,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                                      HIST("dimuon/Lz_GlobalMuonCuts_GoodMatches"),
                                      HIST("dimuon/tauxy_GlobalMuonCuts_GoodMatches"),
                                      HIST("dimuon/tauz_GlobalMuonCuts_GoodMatches"));
-          fillDimuonDecayLengthPlots(MatchedTrackToParCovFwd(mchTrackParNew1, mftTrackParNew1),
+          /*fillDimuonDecayLengthPlots(MatchedTrackToParCovFwd(mchTrackParNew1, mftTrackParNew1),
                                      MatchedTrackToParCovFwd(mchTrackParNew2, mftTrackParNew2),
                                      fwdTrackParNew1AtVertex,
                                      fwdTrackParNew2AtVertex,
@@ -3556,7 +3408,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                                      HIST("dimuon/realign/Lxy_GlobalMuonCuts_GoodMatches"),
                                      HIST("dimuon/realign/Lz_GlobalMuonCuts_GoodMatches"),
                                      HIST("dimuon/realign/tauxy_GlobalMuonCuts_GoodMatches"),
-                                     HIST("dimuon/realign/tauz_GlobalMuonCuts_GoodMatches"));
+                                     HIST("dimuon/realign/tauz_GlobalMuonCuts_GoodMatches"));*/
 /*
           if (invMassMch > 2 && invMassMch < 5) {
             std::cout << std::format("Dimuon invariant mass, MCH vs FWD: {:0.5f} {:0.5f}",
@@ -3589,7 +3441,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
                  MyMFTs const& mftTracks,
                  aod::FwdTrkCls const& clusters,
                  aod::FwdTrackAssoc const& fwdTrackAssocs,
-                 aod::FwdTrkCompColls const& fwdTrackCompColls)
+                 aod::FwdTrkCompColls const& /*fwdTrackCompColls*/)
   {
     auto bc = bcs.begin();
     if (mRunNumber != bc.runNumber()) {
@@ -3599,78 +3451,11 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       mRunNumber = bc.runNumber();
     }
 
-    for (const auto& track : muonTracks) {
-
-      if (track.trackType() <= 2) continue;
-      if (track.trackType() > 3) continue;
-      registry.get<TH2>(HIST("collision_mult"))->Fill(track.compatibleCollIds().size(), track.trackType());
-
-      int64_t trackBC = -1;
-      if (track.has_collision()) {
-        const auto& coll = collisions.rawIteratorAt(track.collisionId());
-        const auto& bc = bcs.rawIteratorAt(coll.bcId());
-        trackBC = bc.globalBC();
-      }
-      float trackTime = track.trackTime();
-      float trackTimeRes = track.trackTimeRes();
-      std::cout << std::format("Collisions associated to track {} of type {} with BC {}: {}", track.globalIndex(), track.trackType(), trackBC, track.compatibleCollIds().size());
-      if (track.compatibleCollIds().size() > 1) std::cout << " XXX";
-      if (track.has_collision() && track.compatibleCollIds().size() < 1) std::cout << " YYY";
-      std::cout << std::endl;
-      if (track.has_collision()) {
-        const auto& coll = collisions.rawIteratorAt(track.collisionId());
-        const float collTime = coll.collisionTime();
-        const float collTimeRes2 = coll.collisionTimeRes() * coll.collisionTimeRes();
-        const auto& bc = bcs.rawIteratorAt(coll.bcId());
-        uint64_t collBC = bc.globalBC();
-
-        const int64_t bcOffset = trackBC - static_cast<int64_t>(collBC);
-        const float deltaTime = trackTime - collTime + bcOffset * o2::constants::lhc::LHCBunchSpacingNS;
-        float sigmaTimeRes2 = collTimeRes2 + trackTimeRes * trackTimeRes;
-        float nSigma = deltaTime / std::sqrt(sigmaTimeRes2);
-
-        std::cout << std::format("  reco coll {}: {:0.3f},{:0.3f},{:0.3f}  time={:0.3f} sigma={:0.3f}", coll.globalIndex(), coll.posX(), coll.posY(), coll.posZ(), coll.collisionTime(), coll.collisionTimeRes()) << std::endl;
-        std::cout << std::format("  collision time={}, collision time res={}, track time={}, track time res={}, bc collision={}, bc track={}, delta time={}, nSigma={:0.3f}", collTime, coll.collisionTimeRes(), track.trackTime(), track.trackTimeRes(), collBC, trackBC, deltaTime, nSigma) << std::endl;
-      }
-      float timeResMin = 1.e6;
-      for (const auto& collId : track.compatibleCollIds()) {
-        std::cout << std::format("  Getting collision {}", collId) << std::endl;
-        const auto& coll = collisions.rawIteratorAt(collId);
-        const float collTime = coll.collisionTime();
-        const float collTimeRes2 = coll.collisionTimeRes() * coll.collisionTimeRes();
-        const auto& bc = bcs.rawIteratorAt(coll.bcId());
-        uint64_t collBC = bc.globalBC();
-
-        const int64_t bcOffset = trackBC - static_cast<int64_t>(collBC);
-        const float deltaTime = trackTime - collTime + bcOffset * o2::constants::lhc::LHCBunchSpacingNS;
-        float sigmaTimeRes2 = collTimeRes2 + trackTimeRes * trackTimeRes;
-        float nSigma = deltaTime / std::sqrt(sigmaTimeRes2);
-
-        //std::cout << std::format("  reco coll {}: {:0.3f},{:0.3f},{:0.3f}  time={:0.3f} sigma={:0.3f}", coll.globalIndex(), coll.posX(), coll.posY(), coll.posZ(), coll.collisionTime(), coll.collisionTimeRes()) << std::endl;
-        std::cout << std::format("  collision {}: {:0.3f},{:0.3f},{:0.3f}  time={:0.3f} sigma={:0.3f}", coll.globalIndex(), coll.posX(), coll.posY(), coll.posZ(), coll.collisionTime(), coll.collisionTimeRes()) << std::endl;
-        std::cout << std::format("      time={}, collision time res={}, track time={}, track time res={}, bc collision={}, bc track={}, delta time={}, nSigma={:0.3f}", collTime, coll.collisionTimeRes(), track.trackTime(), track.trackTimeRes(), collBC, trackBC, deltaTime, nSigma) << std::endl;
-        timeResMin = std::min(timeResMin, coll.collisionTimeRes());
-        for (const auto& collId2 : track.compatibleCollIds()) {
-          if (collId2 <= collId) {
-            continue;
-          }
-          const auto& coll2 = collisions.rawIteratorAt(collId2);
-
-          float dz = std::abs(coll2.posZ() - coll.posZ());
-          registry.get<TH2>(HIST("collision_dz"))->Fill(dz, track.trackType());
-
-          float timeRes = std::hypot(coll.collisionTimeRes(), coll2.collisionTimeRes());
-          registry.get<TH2>(HIST("collision_timeres"))->Fill(timeRes, track.trackType());
-        }
-      }
-      registry.get<TH2>(HIST("collision_timeres_min"))->Fill(timeResMin, track.trackType());
-    }
-
     std::unordered_map<uint64_t, CollisionInfo> collisionInfos;
     InitCollisions(collisions, bcs, muonTracks, clusters, mftTracks, collisionInfos);
 
     if (cfgProduceMuonAlignmentTables) {
-      StoreCollisions(collisionInfos, collisions, muonTracks, clusters, mftTracks, fwdTrackAssocs, fwdTrackCompColls);
+      StoreCollisions(collisionInfos, collisions, bcs, muonTracks, clusters, mftTracks, fwdTrackAssocs);
     }
 
     FillMftPlots(collisions, muonTracks, mftTracks, collisionInfos);
@@ -3686,6 +3471,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
 
   void processDerivedTables(o2::aod::MACollisions const& collisions,
                             soa::Join<o2::aod::MAFwdTracks, o2::aod::MAFwdTracksCov, aod::MAFwdTrkCompColls> const& muonTracks,
+                            //soa::Join<o2::aod::MAFwdTracks, o2::aod::MAFwdTracksCov> const& muonTracks,
                             o2::aod::MAFwdTrkCls const& clusters,
                             o2::aod::MAMFTTracks const& mftTracks)
   {
@@ -3700,6 +3486,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       mRunNumber = c.runNumber();
     }
 
+    /**/
     for (const auto& track : muonTracks) {
       registry.get<TH2>(HIST("collision_mult"))->Fill(track.compatibleCollIds().size(), track.trackType());
       std::cout << std::format("Collisions associated to track {} of type {}: {}", track.globalIndex(), track.trackType(), track.compatibleCollIds().size());
@@ -3707,16 +3494,28 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       for (const auto& collId : track.compatibleCollIds()) {
         std::cout << std::format("  Getting collision {}", collId) << std::endl;
         const auto& coll = collisions.rawIteratorAt(collId);
-        std::cout << std::format("  collision {}: {:0.3f},{:0.3f},{:0.3f}  time={:0.3f} sigma={:0.3f}", coll.globalIndex(), coll.posX(), coll.posY(), coll.posZ(), coll.collisionTime(), coll.collisionTimeRes()) << std::endl;
+        const auto bc = static_cast<double>(coll.globalBC());
+        std::cout << std::format("  collision #1 {}: {:0.3f},{:0.3f},{:0.3f}  bc={} time={:0.3f} sigma={:0.3f}", coll.globalIndex(), coll.posX(), coll.posY(), coll.posZ(), coll.globalBC(), coll.collisionTime(), coll.collisionTimeRes()) << std::endl;
         timeResMin = std::min(timeResMin, coll.collisionTimeRes());
         for (const auto& collId2 : track.compatibleCollIds()) {
           if (collId2 <= collId) {
             continue;
           }
           const auto& coll2 = collisions.rawIteratorAt(collId2);
+          const auto bc2 = static_cast<double>(coll2.globalBC());
+          std::cout << std::format("  collision #2 {}: {:0.3f},{:0.3f},{:0.3f}  bc={} time={:0.3f} sigma={:0.3f}", coll2.globalIndex(), coll2.posX(), coll2.posY(), coll2.posZ(), coll2.globalBC(), coll2.collisionTime(), coll2.collisionTimeRes()) << std::endl;
 
-          float dz = std::abs(coll2.posZ() - coll.posZ());
+          //float dt = std::fabs(coll2.collisionTime() - coll.collisionTime() + bc2 - bc);
+          const float dt = std::fabs(coll2.collisionTime() - coll.collisionTime() + (bc2 - bc) * o2::constants::lhc::LHCBunchSpacingNS);
+          const float dz = std::abs(coll2.posZ() - coll.posZ());
+          std::cout << std::format("    dt={:0.3f} dz={:0.3f}", dt, dz) << std::endl;
           registry.get<TH2>(HIST("collision_dz"))->Fill(dz, track.trackType());
+          if (track.trackType() == 3) {
+            registry.get<TH2>(HIST("collision_dt_vs_dz"))->Fill(dz, dt);
+            if (dz < 0.1 && dt < 200) {
+              std::cout << "XXXX" << std::endl;
+            }
+          }
 
           float timeRes = std::hypot(coll.collisionTimeRes(), coll2.collisionTimeRes());
           registry.get<TH2>(HIST("collision_timeres"))->Fill(timeRes, track.trackType());
@@ -3724,6 +3523,7 @@ struct MuonGlobalAlignment { // o2-linter: disable=name/workflow-file,name/struc
       }
       registry.get<TH2>(HIST("collision_timeres_min"))->Fill(timeResMin, track.trackType());
     }
+    /**/
 
     std::unordered_map<uint64_t, CollisionInfo> collisionInfos;
     InitCollisionsDerivedTables(collisions, muonTracks, clusters, mftTracks, collisionInfos);
@@ -3746,29 +3546,6 @@ struct MuonGlobalAlignmentSpawner {
   Spawns<aod::MAFwdTracksCov> realignFwdTrksCov;
   Spawns<aod::MAMFTTracks> realignMftTrks;
   void init(InitContext const&) {}
-
-  /*auto process(o2::aod::StoredMAFwdTracks const& storedFwd,
-               o2::aod::StoredMAFwdTracksCov const& storedFwdCov,
-               o2::aod::StoredMAMFTTracks const& storedMft)
-  {
-    // Evaluate the dynamic kinematic expressions on the fly
-    auto fwdExtended = o2::soa::Extend<o2::aod::StoredMAFwdTracks,
-                                       aod::fwdtrack::Pt,
-                                       aod::fwdtrack::Eta,
-                                       aod::fwdtrack::P>(storedFwd);
-
-    auto fwdExtended = o2::soa::Extend<o2::aod::StoredMAFwdTracks,
-                                       aod::fwdtrack::Pt,
-                                       aod::fwdtrack::Eta,
-                                       aod::fwdtrack::P>(storedFwd);
-
-    auto mftExtended = o2::soa::Extend<o2::aod::StoredMAMFTTracks,
-                                       aod::fwdtrack::Pt,
-                                       aod::fwdtrack::Eta,
-                                       aod::fwdtrack::P>(storedMft);
-
-    return std::make_tuple(fwdExtended, mftExtended);
-  }*/
 };
 #endif
 
