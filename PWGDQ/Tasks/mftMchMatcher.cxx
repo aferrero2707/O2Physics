@@ -26,9 +26,11 @@
 #include <CCDB/BasicCCDBManager.h>
 #include <CCDB/CcdbApi.h>
 #include <CommonConstants/LHCConstants.h>
+#include <CommonConstants/MathConstants.h>
 #include <DataFormatsParameters/GRPMagField.h>
 #include <DetectorsBase/GeometryManager.h>
 #include <DetectorsBase/Propagator.h>
+#include <Field/MagneticField.h>
 #include <Framework/ASoA.h>
 #include <Framework/AnalysisDataModel.h>
 #include <Framework/AnalysisHelpers.h>
@@ -46,7 +48,7 @@
 #include <Math/MatrixRepresentationsStatic.h>
 #include <Math/SMatrix.h>
 #include <Math/SVector.h>
-#include <TMath.h>
+#include <TGeoGlobalMagField.h>
 #include <TTree.h>
 
 #include <RtypesCore.h>
@@ -88,7 +90,7 @@ namespace o2::aod
 {
 namespace fwdmatchcandidates
 {
-DECLARE_SOA_COLUMN(XMCH, xMCH, std::vector<float>);
+DECLARE_SOA_COLUMN(XMCH, xMCH, float);
 DECLARE_SOA_COLUMN(YMCH, yMCH, float);
 DECLARE_SOA_COLUMN(PhiMCH, phiMCH, float);
 DECLARE_SOA_COLUMN(TanlMCH, tanlMCH, float);
@@ -659,8 +661,6 @@ struct mftMchMatcher { // o2-linter: disable=name/struct (keep temporarily)
   void propagateToZ(o2::track::TrackParCovFwd& mft, o2::dataformats::GlobalFwdTrack& muon, const double z)
   {
     auto mchTrack = mExtrap.FwdtoMCH(muon);
-    std::cout << "Extrapolating MCH track to z=" << z << std::endl;
-    std::cout << "Track z=" << muon.getZ() << std::endl;
 
     // MCH track extrapolation
     // The multiple scattering effect is fully associated to the MCH track
@@ -674,7 +674,6 @@ struct mftMchMatcher { // o2-linter: disable=name/struct (keep temporarily)
         // full extrapolation through the absorber in the upstream direction
         o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrack, z);
       } else {
-        std::cout << "  Extrapolating MCH track upstream of the absorber at z=" << z << std::endl;
         // the destination is inside or downstream of the absorber
         // 1. do a full extrapolation through the absorber to estimate the MS effect
         o2::mch::TrackExtrap::extrapToVertexWithoutBranson(mchTrack, absFront + 0.1f);
@@ -755,8 +754,6 @@ struct mftMchMatcher { // o2-linter: disable=name/struct (keep temporarily)
       o2::track::TrackParCovFwd mftprop = VarManager::FwdToTrackPar(mfttrack, mfttrackcov);
       o2::dataformats::GlobalFwdTrack muonprop = trackToGlobalFwd(muontrack, muontrack);
       if (cfgzMatching.value < 0.) {
-        //mftprop = VarManager::PropagateFwd(mfttrack, mfttrackcov, cfgzMatching.value);
-        //muonprop = VarManager::PropagateMuon(muontrack, collision, VarManager::kToMatching);
         propagateToZ(mftprop, muonprop, cfgzMatching.value);
       }
       auto muonpropCov = muonprop.getCovariances();
@@ -844,10 +841,8 @@ struct mftMchMatcher { // o2-linter: disable=name/struct (keep temporarily)
 
       registry.get<TH1>(HIST("matchTypeAccepted"))->Fill(static_cast<int>(matchType));
 
-      std::vector<float> xmchv{muonprop.getX()};
       fwdMatchMLCandidates(
-        //muonprop.getX(),
-        xmchv,
+        muonprop.getX(),
         muonprop.getY(),
         muonprop.getPhi(),
         muonprop.getTgl(),

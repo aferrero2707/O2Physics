@@ -202,7 +202,7 @@ DECLARE_SOA_INDEX_COLUMN_FULL_CUSTOM(Candidate, candidate, int32_t, o2::aod::QaM
 
 using MyEvents = soa::Join<aod::Collisions, aod::EvSels, aod::FT0Mults, aod::MFTMults, aod::PVMults, aod::CentFT0Ms, aod::CentFT0As, aod::CentFT0Cs>;
 using MyEventsMC = soa::Join<aod::Collisions, aod::McCollisionLabels, aod::EvSels, aod::FT0Mults, aod::MFTMults, aod::PVMults, aod::CentFT0Ms, aod::CentFT0As, aod::CentFT0Cs>;
-using MyMuons = soa::Join<aod::FwdTracks, aod::FwdTracksCov>;
+using MyMuons = soa::Join<aod::FwdTracks, aod::FwdTracksCov, aod::FwdTrkCompColls>;
 using MyMuonsReAlign = soa::Join<aod::FwdTracksReAlign, aod::FwdTrksCovReAlign>;
 using MyMuonsMC = soa::Join<aod::FwdTracks, aod::FwdTracksCov, aod::McFwdTrackLabels, aod::FwdTracksDCA, aod::FwdTrkCompColls>;
 //using MyMuons = soa::Join<aod::FwdTracks, aod::FwdTracksCov, aod::McFwdTrackLabels>;
@@ -736,15 +736,20 @@ struct QaMatching {
     o2::framework::HistPtr hDeltaPt;
     o2::framework::HistPtr hDeltaX;
     o2::framework::HistPtr hDeltaY;
+    o2::framework::HistPtr hDeltaR;
     o2::framework::HistPtr hDeltaPhi;
     o2::framework::HistPtr hDeltaTanl;
+    o2::framework::HistPtr hDeltaTheta;
     o2::framework::HistPtr hDeltaEta;
     o2::framework::HistPtr hRabs;
     o2::framework::HistPtr hPullPt;
     o2::framework::HistPtr hPullX;
     o2::framework::HistPtr hPullY;
+    o2::framework::HistPtr hPullR;
     o2::framework::HistPtr hPullPhi;
     o2::framework::HistPtr hPullTanl;
+    o2::framework::HistPtr hPullTheta;
+    o2::framework::HistPtr hPullTot;
 
     MatchFeaturesHistos(const std::string& path, HistogramRegistry* registry, int numCandidates, double scoreMax)
     {
@@ -755,34 +760,74 @@ struct QaMatching {
       AxisSpec scoreAxis = {1000, 0, scoreMax * 10, "match chi2 / NDF"};
       AxisSpec scoreGapAxis = {100, 0, scoreMax, "match chi2 gap"};
       AxisSpec logpAxis = {16, -1, 3, "log_{10}(p)"};
+      AxisSpec resonanceTypeAxis = {8, 0, 8, "resonance"};
       AxisSpec dxAxis = {100, -20, 20, "#Deltax (cm)"};
       AxisSpec dyAxis = {100, -20, 20, "#Deltay (cm)"};
+      AxisSpec dRAxis = {100, 0, 20, "#DeltaR (cm)"};
       AxisSpec dpAxis = {100, -50, 50, "#Deltap (GeV/c)"};
       AxisSpec dptAxis = {100, -5, 5, "#Deltap_{T} (GeV/c)"};
       AxisSpec dphiAxis = {100, -2, 2, "#Delta#phi (rad)"};
       AxisSpec dtanlAxis = {100, -20, 20, "#Deltatanl"};
+      AxisSpec dthetaAxis = {100, 0, 20, "#Deltatheta"};
       AxisSpec detaAxis = {100, -2, 2, "#Delta#eta"};
       AxisSpec rabsAxis = {100, 0, 100, "R_{abs}"};
       AxisSpec uxAxis = {100, -10, 10, "pull(x)"};
       AxisSpec uyAxis = {100, -10, 10, "pull(y)"};
+      AxisSpec uRAxis = {100, 0, 10, "pull(R)"};
       AxisSpec uptAxis = {100, -10, 10, "pull(p_{T})"};
       AxisSpec uphiAxis = {100, -10, 10, "pull(#phi)"};
       AxisSpec utanlAxis = {100, -10, 10, "pull(tanl)"};
+      AxisSpec uthetaAxis = {500, 0, 50, "pull(theta)"};
+      AxisSpec utotAxis = {500, 0, 50, "pull(tot)"};
 
-      hDeltaP = registry->add((path + "/deltaP").c_str(), "MFT-MCH #Deltap", {HistType::kTHnSparseF, {dpAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hDeltaPt = registry->add((path + "/deltaPt").c_str(), "MFT-MCH #Deltap_{T}", {HistType::kTHnSparseF, {dptAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hDeltaX = registry->add((path + "/deltaX").c_str(), "MFT-MCH #Deltax", {HistType::kTHnSparseF, {dxAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hDeltaY = registry->add((path + "/deltaY").c_str(), "MFT-MCH #Deltay", {HistType::kTHnSparseF, {dyAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hDeltaPhi = registry->add((path + "/deltaPhi").c_str(), "MFT-MCH #Delta#phi", {HistType::kTHnSparseF, {dphiAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hDeltaTanl = registry->add((path + "/deltaTanl").c_str(), "MFT-MCH #DeltaTanl", {HistType::kTHnSparseF, {dtanlAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hDeltaEta = registry->add((path + "/deltaEta").c_str(), "MFT-MCH #Delta#eta", {HistType::kTHnSparseF, {detaAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hRabs = registry->add((path + "/Rabs").c_str(), "MFT-MCH R_{abs}", {HistType::kTHnSparseF, {rabsAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
+      auto setResonanceAxisLabels = [](std::shared_ptr<THnSparse> hn) {
+        hn->GetAxis(7)->SetBinLabel(1, "");
+        hn->GetAxis(7)->SetBinLabel(2, "#omega");
+        hn->GetAxis(7)->SetBinLabel(3, "#phi");
+        hn->GetAxis(7)->SetBinLabel(4, "J/#psi");
+        hn->GetAxis(7)->SetBinLabel(5, "#psi(2S)");
+        hn->GetAxis(7)->SetBinLabel(6, "#Upsilon(1S)");
+        hn->GetAxis(7)->SetBinLabel(7, "#Upsilon(2S)");
+        hn->GetAxis(7)->SetBinLabel(8, "#Upsilon(3S)");
+      };
 
-      hPullPt = registry->add((path + "/pullPt").c_str(), "MFT-MCH Pull p_{T}", {HistType::kTHnSparseF, {uptAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hPullX = registry->add((path + "/pullX").c_str(), "MFT-MCH Pull x", {HistType::kTHnSparseF, {uxAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hPullY = registry->add((path + "/pullY").c_str(), "MFT-MCH Pull y", {HistType::kTHnSparseF, {uyAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hPullPhi = registry->add((path + "/pullPhi").c_str(), "MFT-MCH Pull #phi", {HistType::kTHnSparseF, {uphiAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
-      hPullTanl = registry->add((path + "/pullTanl").c_str(), "MFT-MCH Pull Tanl", {HistType::kTHnSparseF, {utanlAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis}});
+      hDeltaP = registry->add((path + "/deltaP").c_str(), "MFT-MCH #Deltap", {HistType::kTHnSparseF, {dpAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaP));
+      hDeltaPt = registry->add((path + "/deltaPt").c_str(), "MFT-MCH #Deltap_{T}", {HistType::kTHnSparseF, {dptAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaPt));
+      hDeltaX = registry->add((path + "/deltaX").c_str(), "MFT-MCH #Deltax", {HistType::kTHnSparseF, {dxAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaX));
+      hDeltaY = registry->add((path + "/deltaY").c_str(), "MFT-MCH #Deltay", {HistType::kTHnSparseF, {dyAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaY));
+      hDeltaR = registry->add((path + "/deltaR").c_str(), "MFT-MCH #DeltaR", {HistType::kTHnSparseF, {dRAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaR));
+      hDeltaPhi = registry->add((path + "/deltaPhi").c_str(), "MFT-MCH #Delta#phi", {HistType::kTHnSparseF, {dphiAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaPhi));
+      hDeltaTanl = registry->add((path + "/deltaTanl").c_str(), "MFT-MCH #DeltaTanl", {HistType::kTHnSparseF, {dtanlAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaTanl));
+      hDeltaTheta = registry->add((path + "/deltaTheta").c_str(), "MFT-MCH #DeltaTheta", {HistType::kTHnSparseF, {dthetaAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaTheta));
+      hDeltaEta = registry->add((path + "/deltaEta").c_str(), "MFT-MCH #Delta#eta", {HistType::kTHnSparseF, {detaAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hDeltaEta));
+      hRabs = registry->add((path + "/Rabs").c_str(), "MFT-MCH R_{abs}", {HistType::kTHnSparseF, {rabsAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hRabs));
+
+      hPullPt = registry->add((path + "/pullPt").c_str(), "MFT-MCH Pull p_{T}", {HistType::kTHnSparseF, {uptAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullPt));
+      hPullX = registry->add((path + "/pullX").c_str(), "MFT-MCH Pull x", {HistType::kTHnSparseF, {uxAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullX));
+      hPullY = registry->add((path + "/pullY").c_str(), "MFT-MCH Pull y", {HistType::kTHnSparseF, {uyAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullY));
+      hPullR = registry->add((path + "/pullR").c_str(), "MFT-MCH Pull R", {HistType::kTHnSparseF, {uRAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullR));
+      hPullPhi = registry->add((path + "/pullPhi").c_str(), "MFT-MCH Pull #phi", {HistType::kTHnSparseF, {uphiAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullPhi));
+      hPullTanl = registry->add((path + "/pullTanl").c_str(), "MFT-MCH Pull Tanl", {HistType::kTHnSparseF, {utanlAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullTanl));
+      hPullTheta = registry->add((path + "/pullTheta").c_str(), "MFT-MCH Pull Theta", {HistType::kTHnSparseF, {uthetaAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullTheta));
+      hPullTot = registry->add((path + "/pullTot").c_str(), "MFT-MCH Pull Tot", {HistType::kTHnSparseF, {utotAxis, logpAxis, scoreAxis, scoreGapAxis, indexAxis, matchTypeAxis, taggedAxis, resonanceTypeAxis}});
+      setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(hPullTot));
     }
   };
 
@@ -814,7 +859,7 @@ struct QaMatching {
       AxisSpec dqAxis = {3, -1.5, 1.5, "MFT #DeltaQ"};
       AxisSpec indexAxis = {numCandidates + 1, 0, static_cast<double>(numCandidates + 1), "ranking index"};
       AxisSpec indexProdAxis = {numCandidates + 1, 0, static_cast<double>(numCandidates + 1), "ranking index (production)"};
-      AxisSpec resonanceTypeAxis = {6, 0, 6, "resonance"};
+      AxisSpec resonanceTypeAxis = {8, 0, 8, "resonance"};
       AxisSpec promptNonPromptAxis = {2, 0, 2, ""};
 
       o2::framework::HistPtr histPtr;
@@ -825,6 +870,8 @@ struct QaMatching {
         hn->GetAxis(4)->SetBinLabel(4, "J/#psi");
         hn->GetAxis(4)->SetBinLabel(5, "#psi(2S)");
         hn->GetAxis(4)->SetBinLabel(6, "#Upsilon(1S)");
+        hn->GetAxis(4)->SetBinLabel(7, "#Upsilon(2S)");
+        hn->GetAxis(4)->SetBinLabel(8, "#Upsilon(3S)");
       };
 
       hist = registry->add(histName.c_str(), histTitle.c_str(), {HistType::kTH1F, {indexAxis}});
@@ -1083,7 +1130,7 @@ struct QaMatching {
     AxisSpec trackPositionYAtMftAxis = {100, -15, 15, "MFT y (cm)"};
     registry.add((histPath + "taggedMCHTracksAtMFT").c_str(), "Tagged MCH tracks position at MFT end", {HistType::kTH2F, {trackPositionXAtMftAxis, trackPositionYAtMftAxis}});
     if (cfgIsMc.value) {
-      AxisSpec resonanceTypeAxis = {6, 0, 6, "resonance"};
+      AxisSpec resonanceTypeAxis = {8, 0, 8, "resonance"};
       auto setResonanceAxisLabels = [](std::shared_ptr<THnSparse> hn, int axisId) {
         hn->GetAxis(axisId)->SetBinLabel(1, "");
         hn->GetAxis(axisId)->SetBinLabel(2, "#omega");
@@ -1091,6 +1138,8 @@ struct QaMatching {
         hn->GetAxis(axisId)->SetBinLabel(4, "J/#psi");
         hn->GetAxis(axisId)->SetBinLabel(5, "#psi(2S)");
         hn->GetAxis(axisId)->SetBinLabel(6, "#Upsilon(1S)");
+        hn->GetAxis(axisId)->SetBinLabel(7, "#Upsilon(2S)");
+        hn->GetAxis(axisId)->SetBinLabel(8, "#Upsilon(3S)");
       };
 
       registry.add((histPath + "pairedMCHTracksAtMFT").c_str(), "Paired MCH tracks position at MFT end", {HistType::kTH2F, {trackPositionXAtMftAxis, trackPositionYAtMftAxis}});
@@ -1156,10 +1205,16 @@ struct QaMatching {
     AxisSpec pAxis = {50, 0, 100, "p (GeV/c)"};
     AxisSpec angleAxis = {100, 0, 0.5, "#mu^{+}#mu^{-} angle (rad)"};
     AxisSpec angleDiffAxis = {100, -0.05, 0.05, "#mu^{+}#mu^{-} angle difference (rad)"};
-    AxisSpec resonanceTypeAxis = {6, 0, 6, "resonance"};
+    AxisSpec resonanceTypeAxis = {8, 0, 8, "resonance"};
+    AxisSpec promptNonPromptAxis = {3, -1, 2, ""};
+    AxisSpec nonPromptMotherAxis = {5, 0, 5, ""};
+    //AxisSpec vtxDzAxis = {100, 0, 10, "vertex #Deltaz (cm)"};
 
     int matchTypeCombMax = (static_cast<int>(kMatchTypeTrueNonLeading) - 1) * 10 + static_cast<int>(kMatchTypeTrueNonLeading) - 1;
     AxisSpec matchTypeAxis = {matchTypeCombMax + 2, 0, static_cast<double>(matchTypeCombMax + 2), "match type"};
+
+    AxisSpec correctMatchAxis = {4, 0, 4, "correct match"};
+    AxisSpec correctAssociationAxis = {4, 0, 4, "correct association"};
 
     o2::framework::HistPtr histPtr;
     auto setResonanceAxisLabels = [](std::shared_ptr<THnSparse> hn) {
@@ -1169,6 +1224,20 @@ struct QaMatching {
       hn->GetAxis(2)->SetBinLabel(4, "J/#psi");
       hn->GetAxis(2)->SetBinLabel(5, "#psi(2S)");
       hn->GetAxis(2)->SetBinLabel(6, "#Upsilon(1S)");
+      hn->GetAxis(2)->SetBinLabel(7, "#Upsilon(2S)");
+      hn->GetAxis(2)->SetBinLabel(8, "#Upsilon(3S)");
+    };
+    auto setPromptAxisLabels = [](std::shared_ptr<THnSparse> hn) {
+      hn->GetAxis(3)->SetBinLabel(1, "undef");
+      hn->GetAxis(3)->SetBinLabel(2, "prompt");
+      hn->GetAxis(3)->SetBinLabel(3, "non-prompt");
+    };
+    auto setMotherAxisLabels = [](std::shared_ptr<THnSparse> hn) {
+      hn->GetAxis(4)->SetBinLabel(1, "undef");
+      hn->GetAxis(4)->SetBinLabel(2, "c mesons");
+      hn->GetAxis(4)->SetBinLabel(3, "b mesons");
+      hn->GetAxis(4)->SetBinLabel(4, "ccbar mesons");
+      hn->GetAxis(4)->SetBinLabel(5, "bbbar mesons");
     };
 
     // MCH-MID tracks with MCH acceptance cuts
@@ -1209,10 +1278,14 @@ struct QaMatching {
     //histPtr = registryDimuon.add("dimuon/MC/invariantMass_ScaledMftKine_GlobalMuonCuts_GoodMatches_vs_resonance_type", "#mu^{+}#mu^{-} invariant mass vs. resonance tye (global muon cuts, rescaled MFT, good matches)", {HistType::kTH2F, {invMassAxis, resonanceTypeAxis}});
     //setResonanceAxisLabels(std::get<std::shared_ptr<TH2>>(histPtr));
 
-    histPtr = registryDimuon.add("dimuon/tauz_ScaledMftKine_GlobalMuonCuts", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, rescaled MFT)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis}});
+    histPtr = registryDimuon.add("dimuon/tauz_ScaledMftKine_GlobalMuonCuts", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, rescaled MFT)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis, promptNonPromptAxis, nonPromptMotherAxis, correctMatchAxis, correctAssociationAxis}});
     setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
-    histPtr = registryDimuon.add("dimuon/tauz_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis}});
+    setPromptAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    setMotherAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    histPtr = registryDimuon.add("dimuon/tauz_ScaledMftKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, rescaled MFT, good matches)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis, promptNonPromptAxis, nonPromptMotherAxis, correctMatchAxis, correctAssociationAxis}});
     setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    setPromptAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    setMotherAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
 
     // global kinematics as stored in candidates
     // MFT-MCH-MID tracks with MFT acceptance cuts
@@ -1232,10 +1305,14 @@ struct QaMatching {
     //histPtr = registryDimuon.add("dimuon/MC/invariantMass_GlobalKine_GlobalMuonCuts_GoodMatches_vs_resonance_type", "#mu^{+}#mu^{-} invariant mass vs. resonance tye (global muon cuts, global kine, good matches)", {HistType::kTH2F, {invMassAxis, resonanceTypeAxis}});
     //setResonanceAxisLabels(std::get<std::shared_ptr<TH2>>(histPtr));
 
-    histPtr = registryDimuon.add("dimuon/tauz_GlobalKine_GlobalMuonCuts", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, global kine)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis}});
+    histPtr = registryDimuon.add("dimuon/tauz_GlobalKine_GlobalMuonCuts", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, global kine)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis, promptNonPromptAxis, nonPromptMotherAxis, correctMatchAxis, correctAssociationAxis}});
     setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
-    histPtr = registryDimuon.add("dimuon/tauz_GlobalKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, global kine, good matches)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis}});
+    setPromptAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    setMotherAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    histPtr = registryDimuon.add("dimuon/tauz_GlobalKine_GlobalMuonCuts_GoodMatches", "#mu^{+}#mu^{-} pseudo-proper decay length (global muon cuts, global kine, good matches)", {HistType::kTHnSparseF, {tauzAxis, matchTypeAxis, resonanceTypeAxis, promptNonPromptAxis, nonPromptMotherAxis, correctMatchAxis, correctAssociationAxis}});
     setResonanceAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    setPromptAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
+    setMotherAxisLabels(std::get<std::shared_ptr<THnSparse>>(histPtr));
 
     // difference in mu+mu- opening angle between MCH and global muon tracks
     registryDimuon.add("dimuon/angle_GlobalMuonCuts", "#mu^{+}#mu^{-} opening angle difference (global muon cuts)", {HistType::kTHnSparseF, {angleDiffAxis, angleAxis, pAxis}});
@@ -1437,6 +1514,9 @@ struct QaMatching {
     AxisSpec tracksMultiplicityAxis = {cfgMftTrackMultiplicityMax, 0, static_cast<double>(cfgMftTrackMultiplicityMax), "tracks multiplicity"};
     registry.add("tracksMultiplicityMFT", "MFT tracks multiplicity", {HistType::kTH1F, {tracksMultiplicityAxis}});
     registry.add("tracksMultiplicityMCH", "MCH tracks multiplicity", {HistType::kTH1F, {tracksMultiplicityAxis}});
+
+    registry.add("collisions", "Collisions",
+        {HistType::kTHnSparseF, {{100, 0, 1000, "#Deltat (ns)"}, {100, 0, 10, "#Deltaz (cm)"}, {2, 0, 2, "prompt/non-prompt"}}});
 
     // Histogram for storing the index and label of the matching methods in the horizontal axis.
     // This is needed in order to associate the proper label to the match method index in the derived tables.
@@ -1953,6 +2033,44 @@ struct QaMatching {
     }
   }
 
+  template <class TMUON, class TMFT>
+  void fillMatchablePairsForMuon(CollisionInfo& collisionInfo,
+                                 TMUON const& muonTrack,
+                                 TMFT const& mftTracks)
+  {
+    // only consider MCH standalone or MCH-MID matches
+    if (static_cast<int>(muonTrack.trackType()) <= GlobalTrackTypeMax) {
+      return;
+    }
+    if (cfgMatchingRequireMid && static_cast<int>(muonTrack.trackType()) != MchMidTrackType) {
+      // only consider MCH-MID matches
+      return;
+    }
+
+    // skip tracks that do not have an associated MC particle
+    if (!muonTrack.has_mcParticle()) {
+      return;
+    }
+    // get the index associated to the MC particle
+    auto muonMcParticle = muonTrack.mcParticle();
+
+    int64_t muonMcTrackIndex = muonMcParticle.globalIndex();
+
+    for (const auto& mftTrack : mftTracks) {
+      // skip tracks that do not have an associated MC particle
+      if (!mftTrack.has_mcParticle())
+        continue;
+      // get the index associated to the MC particle
+      auto mftMcParticle = mftTrack.mcParticle();
+      int64_t mftMcTrackIndex = mftMcParticle.globalIndex();
+
+      if (muonMcTrackIndex == mftMcTrackIndex) {
+        collisionInfo.matchablePairs.emplace_back(std::make_pair(static_cast<int64_t>(muonTrack.globalIndex()),
+            static_cast<int64_t>(mftTrack.globalIndex())));
+      }
+    }
+  }
+
   int getTrueMatchIndex(const std::vector<MatchingCandidate>& matchCandidatesVector,
                         const std::vector<std::pair<int64_t, int64_t>>& matchablePairs)
   {
@@ -2419,10 +2537,15 @@ struct QaMatching {
 
       // fill collision information for global muon tracks (MFT-MCH-MID matches)
       for (const auto& muonTrack : muonTracks) {
-        if (!muonTrack.has_collision())
-          continue;
+        //if (!muonTrack.has_collision()) continue;
 
-        if (collisionIndex != muonTrack.collisionId()) {
+        // only consider unambiguous tracks for the moment
+        if (muonTrack.compatibleCollIds().size() != 1) {
+          continue;
+        }
+        auto muonCollisionId = muonTrack.compatibleCollIds()[0];
+
+        if (collisionIndex != muonCollisionId) {
           continue;
         }
 
@@ -2431,11 +2554,11 @@ struct QaMatching {
         collisionInfo.bc = bc.globalBC();
         collisionInfo.zVertex = collision.posZ();
 
-        if constexpr (isMC) {
+        /*if constexpr (isMC) {
           if (collisionInfo.matchablePairs.empty()) {
             fillMatchablePairs(collisionInfo, muonTracks, mftTracks);
           }
-        }
+        }*/
 
         if (static_cast<int>(muonTrack.trackType()) > GlobalTrackTypeMax) {
           // standalone MCH or MCH-MID tracks
@@ -2452,6 +2575,10 @@ struct QaMatching {
           getMftMchMatchAttempts(mchTrackInfo, mMftTimeInfos);
 
           collisionInfo.mchTracks.push_back(mchTrackIndex);
+
+          if constexpr (isMC) {
+            fillMatchablePairsForMuon(collisionInfo, muonTrack, mftTracks);
+          }
 
           collisionInfo.reducedMchTrackIds[mchTrackIndex] = reducedMchTrackId;
           reducedMchTrackId += 1;
@@ -2577,7 +2704,7 @@ struct QaMatching {
             auto mftMotherParticles = getMotherParticles(mftTrackTrue);
 
             // get the mother resonance, if existing
-            auto motherParticles = getMotherParticles(mchTrack);
+            /*auto motherParticles = getMotherParticles(mchTrack);
             std::array<int, 5> pdgCodes{kOmega, o2::constants::physics::kPhi, o2::constants::physics::kJPsi, kPsi2S, kUpsilon1S};
             int resonanceId = 0;
             if (motherParticles.size() > 1) {
@@ -2587,7 +2714,9 @@ struct QaMatching {
                   break;
                 }
               }
-            }
+            }*/
+
+            int resonanceId = getMotherParticleId(mchTrack);
 
             registry.get<THnSparse>(HIST("matching/MC/missingMatches"))->Fill(dphi * 180.f / TMath::Pi(), mftTrackProp.getPhi() * 180.f / TMath::Pi(), mchTrackInfo.compatMftTracks.size(), mchTrack.p(), resonanceId);
 
@@ -2805,23 +2934,28 @@ struct QaMatching {
       }
 
       for (const auto& candidate : globalTracksVector) {
+        int resonanceId = 0;
         double dp = candidate.mchTrackProp.getP() - candidate.mftTrackProp.getP();
         double dpt = candidate.mchTrackProp.getPt() - candidate.mftTrackProp.getPt();
         double dx = candidate.mchTrackProp.getX() - candidate.mftTrackProp.getX();
         double dy = candidate.mchTrackProp.getY() - candidate.mftTrackProp.getY();
+        double dR = std::hypot(dx, dy);
         double dphi = candidate.mchTrackProp.getPhi() - candidate.mftTrackProp.getPhi();
         double dtanl = candidate.mchTrackProp.getTanl() - candidate.mftTrackProp.getTanl();
+        double dtheta = std::hypot(dphi, dtanl);
         double deta = candidate.mchTrackProp.getEta() - candidate.mftTrackProp.getEta();
         int matchType = static_cast<int>(candidate.matchType);
         int ranking = candidate.matchRanking - 1;
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaR)->Fill(dR, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTheta)->Fill(dtheta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
 
         double ptError = std::sqrt((1. / candidate.mchTrackProp.getSigma2InvQPt()) + (1. / candidate.mftTrackProp.getSigma2InvQPt()));
         double pullPt = (ptError > 0) ? dpt / ptError : 1.e6;
@@ -2829,15 +2963,21 @@ struct QaMatching {
         double pullX = (xError > 0) ? dx / xError : 1.e6;
         double yError = std::sqrt(candidate.mchTrackProp.getSigma2Y() + candidate.mftTrackProp.getSigma2Y());
         double pullY = (yError > 0) ? dy / yError : 1.e6;
+        double pullR = std::hypot(pullX, pullY);
         double phiError = std::sqrt(candidate.mchTrackProp.getSigma2Phi() + candidate.mftTrackProp.getSigma2Phi());
         double pullPhi = (phiError > 0) ? dphi / phiError : 1.e6;
         double tanlError = std::sqrt(candidate.mchTrackProp.getSigma2Tanl() + candidate.mftTrackProp.getSigma2Tanl());
         double pullTanl = (tanlError > 0) ? dtanl / tanlError : 1.e6;
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPt)->Fill(pullPt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullX)->Fill(pullX, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullY)->Fill(pullY, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPhi)->Fill(pullPhi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTanl)->Fill(pullTanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+        double pullTheta = std::hypot(pullPhi, pullTanl);
+        double pullTot = std::hypot(pullR, pullTheta);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPt)->Fill(pullPt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullX)->Fill(pullX, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullY)->Fill(pullY, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullR)->Fill(pullR, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPhi)->Fill(pullPhi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTanl)->Fill(pullTanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTheta)->Fill(pullTheta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+        std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTot)->Fill(pullTot, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
       }
     }
 
@@ -2904,13 +3044,13 @@ struct QaMatching {
 
       // get the mother resonance, if existing
       bool injected = false;
-      std::cout << "MCH track decay hierarchy: ";
+      //std::cout << "MCH track decay hierarchy: ";
       auto motherParticles = getMotherParticles(mchTrack);
       for (const auto& motherParticle : motherParticles) {
         std::cout << std::format(" -> {}", motherParticle.first);
       }
       if (motherParticles.size() > 0 && motherParticles.back().first != 1000080160) { // protons: 2212, Pb: 1000822080
-        std::cout << "  INJECTED";
+        //std::cout << "  INJECTED";
         injected = true;
       }
       std::cout << std::endl;
@@ -2958,7 +3098,7 @@ struct QaMatching {
 
       // get the mother resonance, if existing
       //auto motherParticles = getMotherParticles(mchTrack);
-      std::array<int, 5> pdgCodes{kOmega, o2::constants::physics::kPhi, o2::constants::physics::kJPsi, kPsi2S, kUpsilon1S};
+      /*std::array<int, 5> pdgCodes{kOmega, o2::constants::physics::kPhi, o2::constants::physics::kJPsi, kPsi2S, kUpsilon1S};
       int resonanceId = 0;
       if (motherParticles.size() > 1) {
         for (size_t pdgIt = 0; pdgIt < pdgCodes.size(); pdgIt++) {
@@ -2967,7 +3107,8 @@ struct QaMatching {
             break;
           }
         }
-      }
+      */
+      int resonanceId = getMotherParticleId(mchTrack);
       int promptNonPrompt = 1;
       if (resonanceId > 0) {
         /*std::cout << "MCH mother particles ";
@@ -3059,19 +3200,23 @@ struct QaMatching {
           double dpt = candidate.mchTrackProp.getPt() - candidate.mftTrackProp.getPt();
           double dx = candidate.mchTrackProp.getX() - candidate.mftTrackProp.getX();
           double dy = candidate.mchTrackProp.getY() - candidate.mftTrackProp.getY();
+          double dR = std::hypot(dx, dy);
           double dphi = candidate.mchTrackProp.getPhi() - candidate.mftTrackProp.getPhi();
           double dtanl = candidate.mchTrackProp.getTanl() - candidate.mftTrackProp.getTanl();
+          double dtheta = std::hypot(dphi, dtanl);
           double deta = candidate.mchTrackProp.getEta() - candidate.mftTrackProp.getEta();
           int matchType = static_cast<int>(candidate.matchType);
           int ranking = candidate.matchRanking - 1;
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaP)->Fill(dp, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPt)->Fill(dpt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaX)->Fill(dx, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaY)->Fill(dy, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaR)->Fill(dR, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaPhi)->Fill(dphi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTanl)->Fill(dtanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaTheta)->Fill(dtheta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hDeltaEta)->Fill(deta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hRabs)->Fill(mchTrack.rAtAbsorberEnd(), logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
 
           double ptError = std::sqrt((1. / candidate.mchTrackProp.getSigma2InvQPt()) + (1. / candidate.mftTrackProp.getSigma2InvQPt()));
           double pullPt = (ptError > 0) ? dpt / ptError : 1.e6;
@@ -3079,15 +3224,21 @@ struct QaMatching {
           double pullX = (xError > 0) ? dx / xError : 1.e6;
           double yError = std::sqrt(candidate.mchTrackProp.getSigma2Y() + candidate.mftTrackProp.getSigma2Y());
           double pullY = (yError > 0) ? dy / yError : 1.e6;
+          double pullR = std::hypot(pullX, pullY);
           double phiError = std::sqrt(candidate.mchTrackProp.getSigma2Phi() + candidate.mftTrackProp.getSigma2Phi());
           double pullPhi = (phiError > 0) ? dphi / phiError : 1.e6;
           double tanlError = std::sqrt(candidate.mchTrackProp.getSigma2Tanl() + candidate.mftTrackProp.getSigma2Tanl());
           double pullTanl = (tanlError > 0) ? dtanl / tanlError : 1.e6;
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPt)->Fill(pullPt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullX)->Fill(pullX, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullY)->Fill(pullY, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPhi)->Fill(pullPhi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
-          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTanl)->Fill(pullTanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged);
+          double pullTheta = std::hypot(pullPhi, pullTanl);
+          double pullTot = std::hypot(pullR, pullTheta);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPt)->Fill(pullPt, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullX)->Fill(pullX, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullY)->Fill(pullY, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullR)->Fill(pullR, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullPhi)->Fill(pullPhi, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTanl)->Fill(pullTanl, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTheta)->Fill(pullTheta, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
+          std::get<std::shared_ptr<THnSparse>>(plotter->fMatchFeaturesGoodMCH->hPullTot)->Fill(pullTot, logp, candidate.matchChi2, chi2Gap, ranking, matchType, isTagged, resonanceId);
         }
       }
 
@@ -3402,14 +3553,17 @@ struct QaMatching {
     }
   }
 
-  template <class C, class TMUON, class TMFT>
+  template <class C, class C2, class TMUON, class TMFT>
   void fillDimuonPlotsMc(const CollisionInfo& collisionInfo,
                          C const& collisions,
+                         C2 const& mcCollisions,
                          TMUON const& muonTracks,
                          TMFT const& mftTracks)
   {
     std::vector<MuonPair> muonPairs;
     std::vector<GlobalMuonPair> globalMuonPairs;
+
+    std::cout << "[fillDimuonPlotsMc] called" << std::endl;
 
     getMuonPairs(collisionInfo, muonPairs, globalMuonPairs);
 
@@ -3490,7 +3644,7 @@ struct QaMatching {
       bool goodGlobalMuonMatches = (isGoodGlobalMatching(candidates1[0]) && isGoodGlobalMatching(candidates2[0]));
 
       // get the mother resonance, if existing
-      auto motherParticles1 = getMotherParticles(mchTrack1);
+      /*auto motherParticles1 = getMotherParticles(mchTrack1);
       auto motherParticles2 = getMotherParticles(mchTrack2);
       std::array<int, 5> pdgCodes{kOmega, o2::constants::physics::kPhi, o2::constants::physics::kJPsi, kPsi2S, kUpsilon1S};
       int resonanceId = 0;
@@ -3501,6 +3655,85 @@ struct QaMatching {
             break;
           }
         }
+      }*/
+
+      int resonanceId = getMotherParticleId(mchTrack1, mchTrack2);
+
+      int promptNonPrompt = -1;
+      auto motherParticles1 = getMotherParticles(mchTrack1);
+      auto motherParticles2 = getMotherParticles(mchTrack2);
+      if (resonanceId > 0) {
+        std::cout << "[fillDimuonPlotsMc] MCH mother particles ";
+        for (const auto& mp : motherParticles1) {
+          std::cout << " -> " << mp.first;
+        }
+        std::cout << std::endl;
+
+        if (motherParticles1.size() <= 3 && motherParticles2.size() <= 3) {
+          promptNonPrompt = 0;
+        } else {
+          promptNonPrompt = 1;
+        }
+        std::cout << std::format("[fillDimuonPlotsMc] prompt/non-prompt resonance {}: {}", resonanceId, promptNonPrompt) << std::endl;
+      }
+      int motherType = -1;
+      if (promptNonPrompt == 1) {
+        motherType = 0; // unknown
+        // get PDG code of first particle from collision
+        auto code = (motherParticles1[motherParticles1.size() - 2].first % 1000);
+        if (code >= 411 && code <= 435) {
+          motherType = 1; // charmed mesons
+        }
+        if (code >= 511 && code <= 545) {
+          motherType = 2; // bottom mesons
+        }
+        if (code >= 441 && code <= 445) {
+          motherType = 3; // ccbar mesons
+          std::cout << std::format("[CICCIO] c-cbar meson {}", motherParticles1[2].first) << std::endl;
+          std::cout << "[CICCIO] MCH mother particles ";
+          for (const auto& mp : motherParticles1) {
+            std::cout << " -> " << mp.first;
+          }
+          std::cout << std::endl;
+        }
+        if (code >= 551 && code <= 557) {
+          motherType = 4; // bbbar mesons
+        }
+        std::cout << std::format("PDG code: {} / {}  mother type: {}", motherParticles1[2].first, code, motherType) << std::endl;
+      }
+
+      int correctMatch = 0;
+      if (candidates2[0].matchType == 0) {
+        correctMatch += 1;
+      }
+      if (candidates1[0].matchType == 0) {
+        correctMatch += 2;
+      }
+
+      int correctCollision = 0;
+      int mcCollisionId = collision.mcCollisionId();
+      int mcCollisionId1 = -1;
+      if (mchTrack1.has_mcParticle()) {
+        const auto& mcParticle = mchTrack1.mcParticle();
+        mcCollisionId1 = mcParticle.mcCollisionId();
+      }
+      int mcCollisionId2 = -1;
+      if (mchTrack2.has_mcParticle()) {
+        const auto& mcParticle = mchTrack2.mcParticle();
+        mcCollisionId2 = mcParticle.mcCollisionId();
+      }
+      if (mcCollisionId2 == mcCollisionId) {
+        correctCollision += 1;
+      }
+      if (mcCollisionId1 == mcCollisionId) {
+        correctCollision += 2;
+      }
+
+      float collDz = -1;
+      if (correctCollision == 0 && mcCollisionId >= 0 && mcCollisionId1 >= 0 && mcCollisionId1 == mcCollisionId2) {
+        const auto& mcCollision = mcCollisions.rawIteratorAt(mcCollisionId);
+        const auto& mcCollisionTrue = mcCollisions.rawIteratorAt(mcCollisionId1);
+        collDz = std::fabs(mcCollision.posZ() - mcCollisionTrue.posZ());
       }
 
       auto mchTrack1AtVertex = propagateToVertexMch(mchTrack1, collision);
@@ -3518,19 +3751,24 @@ struct QaMatching {
         auto v12 = getMuMu4Momentum(muonTrack1AtVertex, muonTrack2AtVertex);
         tauz = 299792458.e-7 * 10. * decayLength->second * v12.M() / (TMath::Abs(v12.Pz()) * o2::constants::physics::LightSpeedCm2NS);
       }
+      std::cout << std::format("[fillDimuonPlotsMc] tauz: {}  prompt/non-prompt: {}   mother type: {}", tauz, promptNonPrompt, motherType) << std::endl;
 
       registryDimuon.get<THnSparse>(HIST("dimuon/invariantMass_MuonKine_GlobalMuonCuts"))->Fill(massMCH, matchType, resonanceId);
       registryDimuon.get<THnSparse>(HIST("dimuon/invariantMass_ScaledMftKine_GlobalMuonCuts"))->Fill(massRescaledKine, matchType, resonanceId);
       registryDimuon.get<THnSparse>(HIST("dimuon/invariantMass_GlobalKine_GlobalMuonCuts"))->Fill(massGlobalKine, matchType, resonanceId);
 
-      registryDimuon.get<THnSparse>(HIST("dimuon/tauz_ScaledMftKine_GlobalMuonCuts"))->Fill(tauz, matchType, resonanceId);
+      registryDimuon.get<THnSparse>(HIST("dimuon/tauz_ScaledMftKine_GlobalMuonCuts"))->Fill(tauz, matchType, resonanceId, promptNonPrompt, motherType, correctMatch, correctCollision);
 
       if (goodGlobalMuonMatches) {
         registryDimuon.get<THnSparse>(HIST("dimuon/invariantMass_MuonKine_GlobalMuonCuts_GoodMatches"))->Fill(massMCH, matchType, resonanceId);
         registryDimuon.get<THnSparse>(HIST("dimuon/invariantMass_ScaledMftKine_GlobalMuonCuts_GoodMatches"))->Fill(massRescaledKine, matchType, resonanceId);
         registryDimuon.get<THnSparse>(HIST("dimuon/invariantMass_GlobalKine_GlobalMuonCuts_GoodMatches"))->Fill(massGlobalKine, matchType, resonanceId);
 
-        registryDimuon.get<THnSparse>(HIST("dimuon/tauz_ScaledMftKine_GlobalMuonCuts_GoodMatches"))->Fill(tauz, matchType, resonanceId);
+        registryDimuon.get<THnSparse>(HIST("dimuon/tauz_ScaledMftKine_GlobalMuonCuts_GoodMatches"))->Fill(tauz, matchType, resonanceId, promptNonPrompt, motherType, correctMatch, correctCollision);
+        if (promptNonPrompt == 1 && std::fabs(tauz) < 0.1 && motherParticles1[1].first == 443 && motherType == 3 && correctCollision == 0 && correctMatch == 3) {
+          std::cout << std::format("XXXYYY {} -> {}  ctau={:0.3f}  MC collisions {} / {},{}",
+              motherParticles1[2].first, motherParticles1[1].first, tauz, mcCollisionId, mcCollisionId1, mcCollisionId2) << std::endl;
+        }
 
         if (massRescaledKine > 3.5 && matchType == 1 && resonanceId == 3) {
           std::cout << std::format("Mass: MCH={:0.3f} scaled={:0.3f}", massMCH, massRescaledKine) << std::endl;
@@ -4228,9 +4466,10 @@ struct QaMatching {
     }
   }
 
-  template <bool isMC, class C, class BC, class TMUON, class TMFT, class CMFT>
+  template <bool isMC, class C, class C2, class BC, class TMUON, class TMFT, class CMFT>
   void processCollision(const CollisionInfo& collisionInfo,
                         C const& collisions,
+                        C2 const& mcCollisions,
                         BC const& bcs,
                         TMUON const& muonTracks,
                         TMFT const& mftTracks,
@@ -4335,7 +4574,7 @@ struct QaMatching {
     } else {
       fillMatchingPlots(collision, bcs, muonTracks, taggedMuons, collisionInfo.matchingCandidates, fChi2MatchingPlotter.get());
     }
-    return;
+    //return;
 
     //-------------------------------
     // Tagged muons
@@ -4400,7 +4639,7 @@ struct QaMatching {
     //-------------------------------
     // Di-muon analysis
     if constexpr (isMC) {
-      fillDimuonPlotsMc(collisionInfo, collisions, muonTracks, mftTracks);
+      fillDimuonPlotsMc(collisionInfo, collisions, mcCollisions, muonTracks, mftTracks);
       //fillDimuonPlots(collisionInfo, collisions, muonTracks, mftTracks);
     } else {
       fillDimuonPlots(collisionInfo, collisions, muonTracks, mftTracks);
@@ -4566,8 +4805,8 @@ struct QaMatching {
                    MyMuonsMC const& muonTracks,
                    MyMFTsMC const& mftTracks,
                    MyMFTCovariances const& mftCovs,
-                   aod::McParticles const& /*mcParticles*/,
-                   aod::McCollisions const& /*mcCollisions*/)
+                   aod::McParticles const& mcParticles,
+                   aod::McCollisions const& mcCollisions)
   {
     auto bc = bcs.begin();
     initCcdb(bc);
@@ -4576,8 +4815,99 @@ struct QaMatching {
     registry.get<TH1>(HIST("counters"))->AddBinContent(2, mftTracks.size());
     registry.get<TH1>(HIST("counters"))->AddBinContent(3, mftCovs.size());
 
+    for (const auto& mcCollision : mcCollisions) {
+
+      // assert if the collision has a prompt or non-prompt J/psi
+      int promptNonPrompt = -1;
+      int trueCollisionId = -1;
+      // loop on recostructed muon tracks
+      for (const auto& muon : muonTracks) {
+        // skip global muons
+        if (muon.trackType() < 3) continue;
+        // skip tracks without collisions
+        if (!muon.has_collision()) continue;
+        // get collision associated to the track
+        const auto& collision = collisions.rawIteratorAt(muon.collisionId());
+        // skip collisions not associated to the current MC collision
+        if (collision.mcCollisionId() != mcCollision.globalIndex()) continue;
+
+        auto motherParticles = getMotherParticles(muon);
+        if (motherParticles.size() < 3) continue;
+        // skip tracks not associated to muons
+        if (std::abs(motherParticles[0].first) != 13) continue;
+        // only select muons from J/psi decays
+        if (motherParticles[1].first != 443) continue;
+
+        const auto& Jpsi = mcParticles.rawIteratorAt(motherParticles[1].second);
+
+        // skip cases where the collision correctly is the same
+        if (Jpsi.mcCollisionId() == mcCollision.globalIndex()) continue;
+
+        if (promptNonPrompt < 0 && motherParticles[2].first == 2212) promptNonPrompt = 0;
+        if (motherParticles[2].first != 2212) promptNonPrompt = 1;
+
+        if (trueCollisionId < 0) trueCollisionId = Jpsi.mcCollisionId();
+      }
+      if (promptNonPrompt < 0) continue;
+      if (trueCollisionId < 0) continue;
+
+      const auto& mcCollBc = bcs.rawIteratorAt(mcCollision.bcId());
+      const auto collTime = static_cast<double>(mcCollision.t()) + mcCollBc.globalBC() * o2::constants::lhc::LHCBunchSpacingNS;
+
+      const auto& mcCollisionTrue = mcCollisions.rawIteratorAt(trueCollisionId);
+      const auto& mcCollBcTrue = bcs.rawIteratorAt(mcCollisionTrue.bcId());
+      const auto collTimeTrue = static_cast<double>(mcCollisionTrue.t()) + mcCollBcTrue.globalBC() * o2::constants::lhc::LHCBunchSpacingNS;
+
+      registry.get<THnSparse>(HIST("collisions"))->Fill((collTimeTrue - collTime), (mcCollision.posZ() - mcCollisionTrue.posZ()), promptNonPrompt);
+    }
+
     for (const auto& muon : muonTracks) {
       registry.get<TH1>(HIST("nTracksPerType"))->Fill(static_cast<int>(muon.trackType()));
+
+      if (!muon.has_collision()) continue;
+      const auto& collision = collisions.rawIteratorAt(muon.collisionId());
+      auto motherParticles = getMotherParticles(muon);
+      if (motherParticles.size() < 4) continue;
+      if (std::abs(motherParticles[0].first) != 13) continue;
+      if (motherParticles[1].first != 443) continue;
+
+      const auto& mcCollision = mcCollisions.rawIteratorAt(collision.mcCollisionId());
+
+      if (collision.mcCollisionId() == mcParticles.rawIteratorAt(motherParticles[0].second).mcCollisionId()) continue;
+
+      std::cout << std::format("[processQAMC] XYZ MCH mother particles for track {} and collision {} (mc={} z={:0.3f} dz={:0.3f})",
+          muon.globalIndex(), muon.collisionId(), collision.mcCollisionId(), mcCollision.posZ(), (collision.posZ() - mcCollision.posZ())) << std::endl;
+      std::cout << std::format("  track type {}  time {}  chi2 {}  q/pt {}",
+          muon.trackType(), muon.trackTime(), muon.chi2(), muon.signed1Pt()) << std::endl;
+      const auto& mcCollBc = bcs.rawIteratorAt(mcCollision.bcId());
+      const auto collTime = static_cast<double>(mcCollision.t()) + mcCollBc.globalBC() * o2::constants::lhc::LHCBunchSpacingNS;
+      std::cout << std::format("    collision BCId {}  time {}  absTime {}",
+          mcCollision.bcId(), mcCollision.t(), collTime) << std::endl;
+
+      /*
+      std::cout << std::format("  Particles for collision {}:", collision.mcCollisionId()) << std::endl;
+      for (const auto& particle : mcParticles) {
+        if (particle.mcCollisionId() != collision.mcCollisionId()) continue;
+        std::cout << std::format("    Particle {} / {}", particle.globalIndex(), particle.pdgCode()) << std::endl;
+      }
+
+      std::cout << std::format("  Particles for collision {}:", mcParticles.rawIteratorAt(motherParticles[0].second).mcCollisionId()) << std::endl;
+      for (const auto& particle : mcParticles) {
+        if (particle.mcCollisionId() != mcParticles.rawIteratorAt(motherParticles[0].second).mcCollisionId()) continue;
+        std::cout << std::format("    Particle {} / {}", particle.globalIndex(), particle.pdgCode()) << std::endl;
+      }
+      */
+      for (const auto& mp : motherParticles) {
+        const auto& mcParticle = mcParticles.rawIteratorAt(mp.second);
+        const auto& mcCollisionTrue = mcCollisions.rawIteratorAt(mcParticle.mcCollisionId());
+        std::cout << std::format("  -> code={} id={} collId={} (z={:0.3f} dz={:0.3f})",
+            mp.first, mcParticle.globalIndex(), mcParticle.mcCollisionId(), mcCollisionTrue.posZ(), (mcCollision.posZ() - mcCollisionTrue.posZ())) << std::endl;
+        const auto& mcCollBcTrue = bcs.rawIteratorAt(mcCollisionTrue.bcId());
+        const auto collTimeTrue = static_cast<double>(mcCollisionTrue.t()) + mcCollBcTrue.globalBC() * o2::constants::lhc::LHCBunchSpacingNS;
+        std::cout << std::format("    collision BCId {}  time {}  absTime {}  delta {}",
+            mcCollision.bcId(), mcCollisionTrue.t(), collTimeTrue, (collTimeTrue - collTime)) << std::endl;
+      }
+      std::cout << std::endl;
     }
 
     mftTrackCovs.clear();
@@ -4588,7 +4918,7 @@ struct QaMatching {
     fillCollisions<true>(collisions, bcs, muonTracks, mftTracks, mftCovs, fCollisionInfos);
 
     for (auto const& [collisionIndex, collisionInfo] : fCollisionInfos) {
-      processCollision<true>(collisionInfo, collisions, bcs, muonTracks, mftTracks, mftCovs);
+      processCollision<true>(collisionInfo, collisions, mcCollisions, bcs, muonTracks, mftTracks, mftCovs);
     }
   }
 
@@ -4621,7 +4951,7 @@ struct QaMatching {
     fillCollisions<false>(collisions, bcs, muonTracks, mftTracks, mftCovs, fCollisionInfos);
 
     for (auto const& [collisionIndex, collisionInfo] : fCollisionInfos) {
-      processCollision<false>(collisionInfo, collisions, bcs, muonTracks, mftTracks, mftCovs);
+      processCollision<false>(collisionInfo, collisions, collisions, bcs, muonTracks, mftTracks, mftCovs);
     }
   }
 
@@ -4633,7 +4963,7 @@ struct QaMatching {
                         MyMFTs const& mftTracks,
                         MyMFTCovariances const& mftCovs)
   {
-    auto bc = bcs.begin();
+    /*auto bc = bcs.begin();
     initCcdb(bc);
 
     for (const auto& muon : muonTracks) {
@@ -4650,8 +4980,8 @@ struct QaMatching {
     fillCollisions<false>(collisions, bcs, muonTracks, mftTracks, mftCovs, fCollisionInfos);
 
     for (auto const& [collisionIndex, collisionInfo] : fCollisionInfos) {
-      processCollision<false>(collisionInfo, collisions, bcs, muonTracks, mftTracks, mftCovs);
-    }
+      processCollision<false>(collisionInfo, collisions, collisions, bcs, muonTracks, mftTracks, mftCovs);
+    }*/
   }
 
   PROCESS_SWITCH(QaMatching, processQAReAlign, "processQAReAlign", false);
