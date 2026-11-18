@@ -3519,9 +3519,9 @@ struct QaMatching {
       auto const& mchTrack = muonTracks.rawIteratorAt(mchIndex);
       auto mchTrackAtVertex = VarManager::PropagateMuon(mchTrack, collision, VarManager::kToVertex);
 
-      //if (!isGoodMuon(mchTrack, collision)) {
-      //  continue;
-      //}
+      // if (!isGoodMuon(mchTrack, collision)) {
+      //   continue;
+      // }
 
       float mchEta = mchTrack.eta();
       float mchPt = mchTrack.pt();
